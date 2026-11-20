@@ -1,0 +1,8 @@
+title,disasterType,resourceType,quantity,peopleAffected,urgency,city,phone,vulnerable
+Landslide on Kalka-Shimla road,ACCIDENT,VEHICLE,3,35,HIGH,Shimla,+91 98160 22222,false
+Old-age home needs oxygen,MEDICAL_SHORTAGE,MEDICAL,12,60,CRITICAL,Mohali,+91 98880 12345,true
+Waterlogged slum - dry rations,FLOOD,FOOD,300,700,MEDIUM,Jalandhar,,true
+Temporary shelter for migrant workers,FLOOD,SHELTER,80,80,HIGH,Rajpura,+91 98720 55555,false
+# the next lines are intentionally invalid to demonstrate error handling
+Missing quantity row,FLOOD,FOOD,,40,LOW,Patiala,,false
+Unknown city row,FIRE,MEDICAL,10,20,HIGH,Atlantis,,false
