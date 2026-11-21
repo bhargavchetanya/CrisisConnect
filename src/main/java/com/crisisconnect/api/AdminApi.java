@@ -52,7 +52,9 @@ final class AdminApi {
             m.put("stats", Json.of(crisis.stats()));
             m.put("pendingUsers", u.isAdmin() ? auth.pendingCount() : 0);
             m.put("messages", notifications.count());
-            m.put("emailMode", notifications.emailEnabled() ? "Brevo (real e-mail)" : "simulated");
+            m.put("emailMode", notifications.emailEnabled() ? "real (Brevo)" : "simulated");
+            m.put("whatsappMode", notifications.whatsappEnabled()
+                    ? "real (Twilio) to " + notifications.realWhatsAppNumbers().size() + " number(s)" : "simulated");
             m.put("recentMessages", Json.list(notifications.outbox(null, 6), Json::of));
             return m;
         });
@@ -143,6 +145,14 @@ final class AdminApi {
             NotificationChannel channel = ch == null || ch.isBlank() || "ALL".equals(ch) ? null : NotificationChannel.valueOf(ch);
             int limit = Validator.parseIntOr(c.query("limit"), 100);
             return Json.list(notifications.outbox(channel, limit), Json::of);
+        });
+
+        api.secure("POST", "/api/admin/notifications/test", c -> {
+            User u = c.require(Role.ADMIN);
+            var sent = notifications.sendTest(u.getEmail());
+            audit.log(u.getEmail(), "TEST_NOTIFICATIONS", sent.size() + " message(s)", c.ip());
+            notifications.flush();                                    // wait for Twilio / Brevo answers
+            return Json.list(notifications.outbox(null, Math.max(1, sent.size())), Json::of);
         });
 
         // ------------------------------------------------ users (ADMIN)

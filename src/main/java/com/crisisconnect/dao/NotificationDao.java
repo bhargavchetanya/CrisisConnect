@@ -15,4 +15,7 @@ public interface NotificationDao {
     List<Notification> findByRequest(int requestId);
 
     int count();
+
+    /** Gateway result for a QUEUED message. */
+    void updateStatus(int id, Notification.Status status, String error);
 }

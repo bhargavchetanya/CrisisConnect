@@ -99,6 +99,13 @@ final class Router {
                     c.status = 400;
                     body = Map.of("errors", List.of("Invalid value: " + e.getMessage()), "error", "Invalid value: " + e.getMessage());
                 }
+                if (body instanceof Redirect redirect) {
+                    ex.getResponseHeaders().set("Location", redirect.location());
+                    ex.getResponseHeaders().set("Cache-Control", "no-store");
+                    for (String ck : c.setCookies) ex.getResponseHeaders().add("Set-Cookie", ck);
+                    ex.sendResponseHeaders(302, -1);
+                    return;
+                }
                 write(ex, c.status, body, r.publicCors(), c.setCookies);
                 return;
             }

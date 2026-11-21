@@ -201,8 +201,9 @@ public class AuthService {
         u.setEmailVerified(true);
         users.update(u);
         audit.log(u.getEmail(), "EMAIL_VERIFIED", "awaiting administrator approval", ip);
-        notifications.newSignupForAdmins(adminEmails, u.getName(), u.getEmail(),
-                u.getOrganizationId() == null ? null : orgs.findById(u.getOrganizationId()).map(Organization::getName).orElse(null));
+        notifications.newSignupForAdmins(u.getName(), u.getEmail(),
+                u.getOrganizationId() == null ? null : orgs.findById(u.getOrganizationId()).map(Organization::getName).orElse(null),
+                "e-mail and password");
         return u;
     }
 
@@ -270,6 +271,54 @@ public class AuthService {
         audit.log(mail, "LOGIN", u.getRole().name(), ip);
         return new Login(u, token, expires);
     }
+
+    /**
+     * "Continue with Google": Google has already verified the e-mail address.
+     * Existing accounts (including the administrator) are logged in; a new person gets a PENDING coordinator
+     * account and the administrator is alerted, exactly like an e-mail sign-up.
+     */
+    public Login loginWithGoogle(GoogleOAuth.Profile p, String ip, String userAgent) throws AuthException {
+        if (p == null || p.email() == null || !p.emailVerified()) {
+            throw new AuthException(403, "GOOGLE_EMAIL_UNVERIFIED", "Your Google account has no verified e-mail address.");
+        }
+        String mail = normEmail(p.email());
+        User u = users.findByEmail(mail).orElse(null);
+        if (u == null) {
+            u = new User(mail, p.name() == null || p.name().isBlank() ? mail.substring(0, mail.indexOf('@')) : p.name().trim(),
+                    Security.hashPassword(Security.randomToken()));          // random password: Google-only account
+            u.setEmailVerified(true);
+            if (isAdminEmail(mail)) { u.setRole(Role.ADMIN); u.setStatus(UserStatus.ACTIVE); }
+            users.save(u);
+            audit.log(mail, "SIGN_UP", "via Google", ip);
+            if (u.getStatus() == UserStatus.PENDING) {
+                notifications.newSignupForAdmins(u.getName(), mail, null, "Google");
+                throw new AuthException(403, "PENDING_APPROVAL",
+                        "Thanks " + firstName(u.getName()) + "! Your request was sent to the administrator. You can log in once it is approved.");
+            }
+        } else if (!u.isEmailVerified()) {
+            u.setEmailVerified(true);                                       // Google proved ownership of the address
+            users.update(u);
+            users.deleteEmailCodes(u.getId());
+        }
+        if (u.getStatus() == UserStatus.PENDING) {
+            throw new AuthException(403, "PENDING_APPROVAL", "Your account is waiting for an administrator to approve it.");
+        }
+        if (u.getStatus() == UserStatus.DISABLED) {
+            throw new AuthException(403, "ACCOUNT_DISABLED", "This account has been disabled by an administrator.");
+        }
+        u.setFailedLogins(0);
+        u.setLockUntil(null);
+        u.setLastLoginAt(LocalDateTime.now());
+        users.updateLoginState(u);
+        String token = Security.randomToken();
+        LocalDateTime expires = LocalDateTime.now().plusHours(sessionHours);
+        users.createSession(Security.sha256(token), u.getId(), expires,
+                userAgent == null ? null : userAgent.substring(0, Math.min(200, userAgent.length())));
+        audit.log(mail, "LOGIN", u.getRole().name() + " via Google", ip);
+        return new Login(u, token, expires);
+    }
+
+    private static String firstName(String name) { return name == null ? "" : name.trim().split("\\s+")[0]; }
 
     /** The active user behind a session cookie, if the session is valid. */
     public Optional<User> userForToken(String token) {

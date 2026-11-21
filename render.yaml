@@ -10,11 +10,25 @@ services:
       # Administrator account(s), created automatically at start-up
       - key: ADMIN_EMAILS
         value: bhargavchetanya47@gmail.com
-      # Set these in the Render dashboard (Environment tab) - never commit secrets
+      # Everything below is secret / personal: set the values in the Render dashboard (Environment tab)
       - key: ADMIN_PASSWORD
         sync: false
-      # Optional: real e-mail (verification codes, approvals) through Brevo
+      # Real e-mail (Brevo)
       - key: BREVO_API_KEY
         sync: false
       - key: EMAIL_FROM
+        sync: false
+      # Google sign-in
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # Real WhatsApp (Twilio)
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: ADMIN_WHATSAPP
+        sync: false
+      - key: WHATSAPP_ALERT_NUMBERS
         sync: false

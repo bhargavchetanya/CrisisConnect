@@ -26,6 +26,7 @@ public class JdbcNotificationDao implements NotificationDao {
         n.setRequestId(rs.wasNull() ? null : req);
         n.setStatus(Notification.Status.valueOf(rs.getString("status")));
         n.setCreatedAt(LocalDateTime.parse(rs.getString("created_at")));
+        n.setError(rs.getString("error"));
         return n;
     }
 
@@ -52,6 +53,12 @@ public class JdbcNotificationDao implements NotificationDao {
     @Override
     public List<Notification> findByRequest(int requestId) {
         return jdbc.query("SELECT * FROM notifications WHERE request_id=? ORDER BY id", JdbcNotificationDao::map, requestId);
+    }
+
+    @Override
+    public void updateStatus(int id, Notification.Status status, String error) {
+        jdbc.update("UPDATE notifications SET status=?, error=? WHERE id=?", status.name(),
+                error == null ? null : error.length() > 300 ? error.substring(0, 300) : error, id);
     }
 
     @Override

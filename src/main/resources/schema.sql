@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     event           TEXT    NOT NULL,
     request_id      INTEGER REFERENCES emergency_requests(id) ON DELETE SET NULL,
     status          TEXT    NOT NULL,
+    error           TEXT,
     created_at      TEXT    NOT NULL
 );
 

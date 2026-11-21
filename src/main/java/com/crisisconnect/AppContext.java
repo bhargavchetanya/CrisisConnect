@@ -9,9 +9,13 @@ import com.crisisconnect.service.BackupService;
 import com.crisisconnect.service.CrisisService;
 import com.crisisconnect.service.CsvImportService;
 import com.crisisconnect.service.EmailSender;
+import com.crisisconnect.service.GoogleOAuth;
 import com.crisisconnect.service.MatchingEngine;
 import com.crisisconnect.service.NotificationService;
 import com.crisisconnect.service.ReportService;
+import com.crisisconnect.service.WhatsAppGateway;
+import com.crisisconnect.util.Phones;
+import java.util.List;
 import com.crisisconnect.util.AppConfig;
 import com.crisisconnect.util.LoggingConfig;
 
@@ -35,6 +39,7 @@ public final class AppContext {
     private final NotificationService notificationService;
     private final AuditService auditService;
     private final AuthService authService;
+    private final GoogleOAuth googleOAuth;
 
     private AppContext() {
         AppConfig cfg = AppConfig.get();
@@ -52,18 +57,27 @@ public final class AppContext {
         // ---- v2: notifications, audit log, accounts ----
         EmailSender email = new EmailSender(cfg.getString("brevo.api.key", ""), cfg.getString("email.from", ""),
                 cfg.getString("email.from.name", "CrisisConnect"));
-        notificationService = new NotificationService(DaoFactory.notifications(), DaoFactory.organizations(), email,
-                publicUrl(cfg), cfg.getDouble("notify.critical.radiusKm", 60));
+        WhatsAppGateway whatsapp = new WhatsAppGateway(cfg.getString("twilio.account.sid", ""),
+                cfg.getString("twilio.auth.token", ""), cfg.getString("twilio.whatsapp.from", ""), "");
+        List<String> adminEmails = Arrays.stream(cfg.getString("admin.emails", "").split("[,; ]+"))
+                .map(String::trim).filter(s -> !s.isEmpty()).toList();
+        notificationService = new NotificationService(DaoFactory.notifications(), DaoFactory.organizations(), email, whatsapp,
+                publicUrl(cfg), cfg.getDouble("notify.critical.radiusKm", 60),
+                Phones.parseList(cfg.getString("whatsapp.alert.numbers", "")), cfg.getString("admin.whatsapp", ""),
+                adminEmails, cfg.getBoolean("whatsapp.send.to.all", false));
         crisisService.addNotifier(notificationService);           // observer: SMS / WhatsApp simulation
         auditService = new AuditService(DaoFactory.audit());
         authService = new AuthService(DaoFactory.users(), DaoFactory.organizations(), notificationService, auditService,
-                Arrays.asList(cfg.getString("admin.emails", "").split("[,; ]+")),
+                adminEmails,
                 cfg.getInt("auth.session.hours", 24), cfg.getBoolean("auth.show.dev.codes", true));
         authService.bootstrapAdmins(cfg.getString("admin.password", ""));
         if (seed && cfg.getBoolean("demo.accounts", true)) authService.seedDemoCoordinator();
         authService.purgeExpiredSessions();
-        LOG.info("Application context ready (e-mail delivery: "
-                + (email.isConfigured() ? "Brevo" : "simulated") + ", public URL " + notificationService.publicUrl() + ")");
+        googleOAuth = new GoogleOAuth(cfg.getString("google.client.id", ""), cfg.getString("google.client.secret", ""));
+        LOG.info("Google sign-in: " + (googleOAuth.isConfigured() ? "enabled" : "not configured"));
+        LOG.info("Application context ready (e-mail: " + (email.isConfigured() ? "Brevo" : "simulated")
+                + ", WhatsApp: " + (whatsapp.isConfigured() ? "Twilio -> " + notificationService.realWhatsAppNumbers().size() + " number(s)" : "simulated")
+                + ", public URL " + notificationService.publicUrl() + ")");
     }
 
     /** APP_PUBLIC_URL, else Render's automatic RENDER_EXTERNAL_URL, else localhost. */
@@ -94,4 +108,5 @@ public final class AppContext {
     public NotificationService notifications() { return notificationService; }
     public AuditService audit() { return auditService; }
     public AuthService auth() { return authService; }
+    public GoogleOAuth google() { return googleOAuth; }
 }

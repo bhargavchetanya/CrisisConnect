@@ -19,6 +19,7 @@ import com.crisisconnect.model.UrgencyLevel;
 import com.crisisconnect.service.AuditService;
 import com.crisisconnect.service.AuthService;
 import com.crisisconnect.service.CrisisService;
+import com.crisisconnect.service.GoogleOAuth;
 import com.crisisconnect.service.NotificationService;
 import com.crisisconnect.util.CityDirectory;
 import com.crisisconnect.util.Security;
@@ -66,6 +67,7 @@ public class ApiServer {
     private final AuthService auth;
     private final NotificationService notifications;
     private final AuditService audit;
+    private final GoogleOAuth google;
     private final int port;
     private final Path webRoot;
     private final RateLimiter sosLimiter = new RateLimiter(15, 10 * 60_000L);
@@ -73,11 +75,13 @@ public class ApiServer {
 
     /** Kept for the JavaFX app: pulls the other services from the AppContext. */
     public ApiServer(CrisisService service, int port, Path webRoot) {
-        this(service, AppContext.get().auth(), AppContext.get().notifications(), AppContext.get().audit(), port, webRoot);
+        this(service, AppContext.get().auth(), AppContext.get().notifications(), AppContext.get().audit(),
+                AppContext.get().google(), port, webRoot);
     }
 
     public ApiServer(CrisisService service, AuthService auth, NotificationService notifications, AuditService audit,
-                     int port, Path webRoot) {
+                     GoogleOAuth google, int port, Path webRoot) {
+        this.google = google;
         this.service = service;
         this.auth = auth;
         this.notifications = notifications;
@@ -106,7 +110,7 @@ public class ApiServer {
             audit.log(u.getEmail(), "RUN_MATCH", report.headline(), c.ip());
             return Json.of(report);
         });
-        new AuthApi(auth, audit).register(api);
+        new AuthApi(auth, audit, google, notifications.publicUrl()).register(api);
         new AdminApi(service, auth, notifications, audit).register(api);
 
         server = HttpServer.create(new InetSocketAddress(port), 0);

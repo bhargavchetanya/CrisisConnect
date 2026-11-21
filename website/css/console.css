@@ -86,6 +86,7 @@
 .pill.FULFILLED, .pill.ACTIVE, .pill.SENT { background: rgba(46,213,115,.15); color: #7ef0ab; }
 .pill.CANCELLED, .pill.DISABLED, .pill.FAILED { background: rgba(142,154,184,.15); color: #aab3cc; }
 .pill.PENDING { background: rgba(245,197,24,.15); color: #ffe07a; }
+.pill.QUEUED { background: rgba(76,141,255,.15); color: #9dc0ff; }
 .pill.SIMULATED { background: rgba(160,107,255,.15); color: #cdb4ff; }
 .progress { height: 6px; border-radius: 6px; background: #1b2448; overflow: hidden; min-width: 90px; }
 .progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--teal), var(--green)); }
@@ -101,12 +102,20 @@
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: .9rem; }
 .kv span { color: var(--muted); }
 
+.btn-google { background: #fff; color: #1f1f1f; border: 1px solid #dadce0; gap: 10px; }
+.btn-google:hover { box-shadow: 0 6px 18px rgba(255,255,255,.15); }
+.or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: .82rem; margin: 16px 0; }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.msg .err-text { font-size: .78rem; color: #ff9aa3; background: rgba(255,71,87,.08); border-radius: 8px; padding: 6px 9px; }
+.msg.real { box-shadow: inset 0 0 0 1px rgba(37,211,102,.45); }
+.msg .real-tag { margin-left: auto; font-size: .66rem; font-weight: 800; color: #6ff0a0; letter-spacing: .05em; }
+
 /* ---------- outbox: phone-style messages ---------- */
 .outbox { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
 .msg { border-radius: 16px; padding: 14px 16px; border: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; gap: 8px; position: relative; }
 .msg .head { display: flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--muted); }
 .msg .head b { color: var(--text); font-size: .88rem; }
-.msg .ch { font-size: .68rem; font-weight: 800; padding: 3px 8px; border-radius: 6px; letter-spacing: .04em; }
+.msg .ch { white-space: nowrap; font-size: .68rem; font-weight: 800; padding: 3px 8px; border-radius: 6px; letter-spacing: .04em; }
 .msg .bubble { padding: 10px 13px; border-radius: 14px 14px 14px 4px; font-size: .9rem; line-height: 1.45; word-break: break-word; }
 .msg.SMS .ch { background: #2a3359; color: #c6d2ff; }
 .msg.SMS .bubble { background: #222b4f; }

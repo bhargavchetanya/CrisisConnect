@@ -83,6 +83,7 @@ public class CrisisService {
         o.setName(o.getName().trim());
         orgDao.save(o);
         events.publish(new CrisisEvent(CrisisEvent.Type.ORGANIZATION_ADDED, o.getName() + " joined the network"));
+        fire(n -> n.organizationRegistered(o));
         return o;
     }
 
@@ -281,6 +282,7 @@ public class CrisisService {
                 partial, unmet, failed, System.currentTimeMillis() - start, log);
         LOG.info("Matching run finished: " + report.headline());
         events.publish(new CrisisEvent(CrisisEvent.Type.MATCH_COMPLETED, report.headline()));
+        fire(n -> n.matchCompleted(report));
         return report;
     }
 

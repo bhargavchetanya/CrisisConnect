@@ -1,6 +1,7 @@
 package com.crisisconnect.service;
 
 import com.crisisconnect.model.EmergencyRequest;
+import com.crisisconnect.model.Organization;
 
 import java.util.List;
 
@@ -18,4 +19,9 @@ public interface CrisisNotifier {
     default void resourcesDispatched(EmergencyRequest request, List<AllocationPlan> dispatches) { }
 
     default void requestCancelled(EmergencyRequest request) { }
+
+    /** Called once after every Smart Match run. */
+    default void matchCompleted(MatchReport report) { }
+
+    default void organizationRegistered(Organization organization) { }
 }

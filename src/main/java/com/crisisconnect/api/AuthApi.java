@@ -4,6 +4,12 @@ import com.crisisconnect.exception.AuthException;
 import com.crisisconnect.model.User;
 import com.crisisconnect.service.AuditService;
 import com.crisisconnect.service.AuthService;
+import com.crisisconnect.service.GoogleOAuth;
+import com.crisisconnect.util.Security;
+
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ConcurrentHashMap;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -15,14 +21,61 @@ final class AuthApi {
 
     private final AuthService auth;
     private final AuditService audit;
+    private final GoogleOAuth google;
+    private final String publicUrl;
     private final RateLimiter limiter = new RateLimiter(30, 15 * 60_000L);   // 30 tries / 15 min / IP / action
 
-    AuthApi(AuthService auth, AuditService audit) {
+    /** Pending Google sign-ins: state -> PKCE verifier + where to go afterwards (10 minutes). */
+    private record PendingGoogle(String verifier, String next, long expiresAt) { }
+    private final Map<String, PendingGoogle> pending = new ConcurrentHashMap<>();
+
+    AuthApi(AuthService auth, AuditService audit, GoogleOAuth google, String publicUrl) {
         this.auth = auth;
         this.audit = audit;
+        this.google = google;
+        this.publicUrl = publicUrl;
+    }
+
+    private String redirectUri() { return publicUrl + "/api/auth/google/callback"; }
+
+    private static String safeNext(String next) {
+        return next != null && next.startsWith("/") && !next.startsWith("//") && !next.contains("\\") ? next : "/admin.html";
+    }
+
+    private static Redirect toLogin(String key, String value) {
+        return new Redirect("/login.html?" + key + "=" + URLEncoder.encode(value, StandardCharsets.UTF_8));
     }
 
     void register(Router api) {
+        api.secure("GET", "/api/auth/providers", c -> Map.of("google", google != null && google.isConfigured()))
+           .secure("GET", "/api/auth/google", c -> {
+               if (google == null || !google.isConfigured()) return toLogin("error", "Google sign-in is not configured yet.");
+               if (!limiter.allow("google:" + c.ip())) return toLogin("error", "Too many attempts. Please wait a few minutes.");
+               long now = System.currentTimeMillis();
+               pending.values().removeIf(p -> p.expiresAt() < now);
+               String state = Security.randomToken();
+               String verifier = GoogleOAuth.newVerifier();
+               pending.put(state, new PendingGoogle(verifier, safeNext(c.query("next")), now + 10 * 60_000L));
+               return new Redirect(google.authorizationUrl(redirectUri(), state, verifier));
+           })
+           .secure("GET", "/api/auth/google/callback", c -> {
+               if (c.query("error") != null) return toLogin("error", "Google sign-in was cancelled.");
+               PendingGoogle p = c.query("state") == null ? null : pending.remove(c.query("state"));
+               if (p == null || p.expiresAt() < System.currentTimeMillis() || c.query("code") == null) {
+                   return toLogin("error", "Google sign-in expired - please try again.");
+               }
+               try {
+                   GoogleOAuth.Profile profile = google.exchange(c.query("code"), p.verifier(), redirectUri());
+                   var login = auth.loginWithGoogle(profile, c.ip(), c.userAgent());
+                   c.setSession(login.token(), Duration.between(LocalDateTime.now(), login.expiresAt()).getSeconds());
+                   return new Redirect(p.next());
+               } catch (AuthException e) {
+                   return toLogin("PENDING_APPROVAL".equals(e.getCode()) ? "pending" : "error", e.getMessage());
+               } catch (Exception e) {
+                   java.util.logging.Logger.getLogger(AuthApi.class.getName()).warning("Google sign-in failed: " + e);
+                   return toLogin("error", "Google sign-in failed. Please try again.");
+               }
+           });
         api.secure("GET", "/api/auth/me", c -> {
                Map<String, Object> out = new LinkedHashMap<>();          // Map.of() does not allow null values
                out.put("user", c.user().map(AuthApi::session).orElse(null));

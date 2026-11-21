@@ -111,6 +111,15 @@ public final class DatabaseManager {
         try (Statement st = c.createStatement()) {
             st.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_requests_tracking ON emergency_requests(tracking_code)");
         }
+        // v3: gateway error text for real WhatsApp / e-mail deliveries
+        boolean hasError = false;
+        try (Statement st = c.createStatement();
+             java.sql.ResultSet rs = st.executeQuery("PRAGMA table_info(notifications)")) {
+            while (rs.next()) if ("error".equalsIgnoreCase(rs.getString("name"))) hasError = true;
+        }
+        if (!hasError) {
+            try (Statement st = c.createStatement()) { st.execute("ALTER TABLE notifications ADD COLUMN error TEXT"); }
+        }
     }
 
     /** Character-stream reading of a classpath file (Unit 3 - I/O). */

@@ -184,9 +184,11 @@
   // ------------------------------------------------------------------ outbox
   function msgCard(m) {
     const icon = { SMS: "✉️", WHATSAPP: "🟢", EMAIL: "📧" }[m.channel];
-    return `<div class="msg ${m.channel}">
-      <div class="head"><span class="ch">${icon} ${h(m.channelLabel.toUpperCase())}</span><b>${h(m.toName || "")}</b><span class="mono">${h(m.to)}</span></div>
-      <div class="bubble">${h(m.message)}</div>
+    const real = m.status !== "SIMULATED";
+    return `<div class="msg ${m.channel}${real ? " real" : ""}">
+      <div class="head"><span class="ch">${icon} ${h(m.channelLabel.toUpperCase())}</span><b>${h(m.toName || "")}</b><span class="mono">${h(m.to)}</span>${real ? `<span class="real-tag">REAL</span>` : ""}</div>
+      <div class="bubble" style="white-space:pre-line">${h(m.message)}</div>
+      ${m.error ? `<div class="err-text">⚠ ${h(m.error)}</div>` : ""}
       <div class="foot"><span class="event">${h(m.event)}</span><span><span class="pill ${m.status}">${m.status}</span> · ${ago(m.createdAt)}</span></div>
     </div>`;
   }
@@ -194,7 +196,7 @@
   async function loadOutbox() {
     try {
       const [list, o] = await Promise.all([api("/api/admin/outbox?limit=120&channel=" + channel), api("/api/admin/overview")]);
-      $("#outboxNote").textContent = `SMS & WhatsApp are simulated (no telecom gateway) · e-mail: ${o.emailMode} · ${fmt(o.messages)} messages in total`;
+      $("#outboxNote").textContent = `WhatsApp: ${o.whatsappMode} · e-mail: ${o.emailMode} · SMS: simulated · ${fmt(o.messages)} messages`;
       $("#outbox").innerHTML = list.length ? list.map(msgCard).join("")
         : `<div class="empty panel">No messages yet. Raise an SOS with a phone number, or run Smart Match.</div>`;
     } catch (e) { handleError(e); }
@@ -253,6 +255,18 @@
   // ------------------------------------------------------------------ actions (event delegation)
   function wire() {
     $("#runMatch").onclick = runMatch;
+    const testBtn = $("#sendTest");
+    if (testBtn) testBtn.onclick = async () => {
+      testBtn.disabled = true; testBtn.textContent = "Sending…";
+      try {
+        const res = await api("/api/admin/notifications/test", { method: "POST" });
+        const ok = res.filter(m => m.status === "SENT").length, failed = res.filter(m => m.status === "FAILED").length;
+        if (!res.length) toast("Nothing to send", "Set ADMIN_WHATSAPP / WHATSAPP_ALERT_NUMBERS and ADMIN_EMAILS on the server.", "warn");
+        else toast("Test sent", `${ok} delivered to the gateway · ${failed} failed · ${res.length - ok - failed} simulated`, failed ? "err" : "");
+        loadOutbox();
+      } catch (e) { handleError(e); }
+      finally { testBtn.disabled = false; testBtn.textContent = "📲 Send test WhatsApp + e-mail"; }
+    };
     $("#logout").onclick = async () => {
       try { await api("/api/auth/logout", { method: "POST" }); } catch (_) { /* ignore */ }
       location.replace("/login.html");

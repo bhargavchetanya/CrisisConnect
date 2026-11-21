@@ -106,4 +106,17 @@
   };
 
   if (location.hash === "#register") show("registerView");
+
+  // "Continue with Google" (only shown when GOOGLE_CLIENT_ID / SECRET are configured on the server)
+  api("/api/auth/providers").then(p => {
+    if (!p.google) return;
+    document.querySelectorAll(".google-btn, .google-or").forEach(el => el.hidden = false);
+    document.querySelectorAll(".google-btn").forEach(a => a.href = "/api/auth/google?next=" + encodeURIComponent(safeNext));
+  }).catch(() => {});
+
+  // messages coming back from the Google callback
+  const qs = new URLSearchParams(location.search);
+  const flash = $("#flash");
+  if (qs.get("pending")) { flash.className = "notice warn"; flash.textContent = qs.get("pending"); flash.hidden = false; }
+  else if (qs.get("error")) { flash.className = "notice err"; flash.textContent = qs.get("error"); flash.hidden = false; }
 })();

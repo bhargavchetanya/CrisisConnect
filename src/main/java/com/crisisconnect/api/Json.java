@@ -219,6 +219,7 @@ public final class Json {
         m.put("event", n.getEvent());
         m.put("requestId", n.getRequestId());
         m.put("status", n.getStatus().name());
+        m.put("error", n.getError());
         m.put("createdAt", n.getCreatedAt().toString());
         return m;
     }

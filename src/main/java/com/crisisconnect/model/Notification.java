@@ -5,7 +5,8 @@ public class Notification extends BaseEntity {
 
     private static final long serialVersionUID = 1L;
 
-    public enum Status { SIMULATED, SENT, FAILED }
+    /** SIMULATED = recorded only; QUEUED = handed to a real gateway (WhatsApp / e-mail); SENT / FAILED = gateway answer. */
+    public enum Status { SIMULATED, QUEUED, SENT, FAILED }
 
     private NotificationChannel channel;
     private String recipient;        // phone number or e-mail address
@@ -14,6 +15,7 @@ public class Notification extends BaseEntity {
     private String event;            // SOS_RECEIVED, CRITICAL_ALERT, DISPATCH_ORDER, HELP_ON_THE_WAY ...
     private Integer requestId;       // nullable
     private Status status = Status.SIMULATED;
+    private String error;            // gateway error text when FAILED
 
     public Notification() { }
 
@@ -42,6 +44,8 @@ public class Notification extends BaseEntity {
     public void setEvent(String event) { this.event = event; }
     public Integer getRequestId() { return requestId; }
     public void setRequestId(Integer requestId) { this.requestId = requestId; }
+    public String getError() { return error; }
+    public void setError(String error) { this.error = error; }
     public Status getStatus() { return status; }
     public void setStatus(Status status) { this.status = status; }
 }

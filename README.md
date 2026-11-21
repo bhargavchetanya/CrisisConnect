@@ -78,6 +78,12 @@ Raise an SOS on the website → it pops up instantly on the desktop dashboard as
 | `ADMIN_PASSWORD` | administrator password (set it in Render → Environment) |
 | `BREVO_API_KEY`, `EMAIL_FROM` | optional real e-mail delivery |
 | `APP_PUBLIC_URL` | link used in SMS/WhatsApp messages (on Render, `RENDER_EXTERNAL_URL` is used automatically) |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | "Continue with Google" (redirect URI: `<public URL>/api/auth/google/callback`) |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | real WhatsApp through Twilio (sandbox sender `+14155238886` by default; override with `TWILIO_WHATSAPP_FROM`) |
+| `ADMIN_WHATSAPP` | administrator's mobile: every SOS, join request, new organization and Smart Match summary |
+| `WHATSAPP_ALERT_NUMBERS` | comma-separated mobiles that get every SOS with disaster + city (sandbox: each must send the join code first) |
+
+Only `ADMIN_WHATSAPP` and `WHATSAPP_ALERT_NUMBERS` receive real WhatsApp; all other numbers stay simulated. The console's **SMS & WhatsApp → Send test** button checks the whole setup.
 
 Run locally with an admin password: `ADMIN_PASSWORD='YourPass123' mvn compile exec:java`
 
