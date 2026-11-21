@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Track your SOS — CrisisConnect</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/console.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23ff4757'/%3E%3Cpath d='M16 8v16M8 16h16' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+<header class="nav">
+  <a class="brand" href="/"><span class="brand-mark">+</span><span>Crisis<b>Connect</b></span></a>
+  <nav class="nav-links" id="navLinks">
+    <a href="/#live">Live Ops</a><a href="/#sos">Raise SOS</a><a href="/track.html" style="color:#fff">Track SOS</a>
+  </nav>
+  <div class="auth-slot" id="authSlot"></div>
+</header>
+
+<main class="track-wrap">
+  <h1 style="font-size:clamp(1.9rem,4vw,2.6rem);letter-spacing:-.03em">Track your SOS</h1>
+  <p class="muted" style="font-size:1rem">Enter the tracking ID you got when you raised the SOS (it was also sent to you by SMS).</p>
+  <form class="track-search" id="trackForm">
+    <input class="inp" name="code" id="codeInput" placeholder="CC-XXXXXX" maxlength="9" autocomplete="off" spellcheck="false">
+    <button class="btn btn-red" type="submit">Track</button>
+  </form>
+  <div id="result"></div>
+</main>
+<div class="toast-host" id="toasts"></div>
+<script src="js/common.js"></script>
+<script src="js/track.js"></script>
+</body>
+</html>

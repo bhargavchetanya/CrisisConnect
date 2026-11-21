@@ -71,10 +71,45 @@ public final class DatabaseManager {
                 for (String sql : stripComments(script).split(";")) {
                     if (!sql.isBlank()) st.execute(sql.trim());
                 }
+                migrate(c);
             }
             LOG.info("Database schema ready at " + url);
         } catch (SQLException | IOException e) {
             throw new DataAccessException("Could not initialise database schema", e);
+        }
+    }
+
+    /**
+     * Small, idempotent schema migrations for databases created by an older version.
+     * v2: emergency_requests.tracking_code (public SOS tracking ID, e.g. CC-7KQ4MZ).
+     */
+    private static void migrate(Connection c) throws SQLException {
+        boolean hasTracking = false;
+        try (Statement st = c.createStatement();
+             java.sql.ResultSet rs = st.executeQuery("PRAGMA table_info(emergency_requests)")) {
+            while (rs.next()) if ("tracking_code".equalsIgnoreCase(rs.getString("name"))) hasTracking = true;
+        }
+        if (!hasTracking) {
+            try (Statement st = c.createStatement()) {
+                st.execute("ALTER TABLE emergency_requests ADD COLUMN tracking_code TEXT");
+            }
+            LOG.info("Migration: added emergency_requests.tracking_code");
+        }
+        // back-fill codes for rows created before tracking existed
+        java.util.List<Integer> missing = new java.util.ArrayList<>();
+        try (Statement st = c.createStatement();
+             java.sql.ResultSet rs = st.executeQuery("SELECT id FROM emergency_requests WHERE tracking_code IS NULL")) {
+            while (rs.next()) missing.add(rs.getInt(1));
+        }
+        try (java.sql.PreparedStatement ps = c.prepareStatement("UPDATE emergency_requests SET tracking_code=? WHERE id=?")) {
+            for (int id : missing) {
+                ps.setString(1, com.crisisconnect.util.TrackingCodes.next());
+                ps.setInt(2, id);
+                ps.executeUpdate();
+            }
+        }
+        try (Statement st = c.createStatement()) {
+            st.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_requests_tracking ON emergency_requests(tracking_code)");
         }
     }
 

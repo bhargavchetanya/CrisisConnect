@@ -25,9 +25,16 @@ public class Allocation extends BaseEntity {
         this.distanceKm = distanceKm;
     }
 
-    /** Rough ETA assuming 40 km/h average speed in disaster conditions. */
+    /** Minutes needed to load and leave even when the stock is in the same city. */
+    public static final int MOBILISATION_MINUTES = 10;
+
+    /** Rough ETA: 10 min mobilisation + travel at 40 km/h average speed in disaster conditions. */
+    public static int etaFor(double distanceKm) {
+        return MOBILISATION_MINUTES + (int) Math.ceil(distanceKm / 40.0 * 60);
+    }
+
     public int etaMinutes() {
-        return (int) Math.ceil(distanceKm / 40.0 * 60);
+        return etaFor(distanceKm);
     }
 
     @Override

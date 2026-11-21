@@ -44,6 +44,8 @@ public class CrisisService {
     private final AllocationDao allocationDao;
     private final MatchingEngine engine;
     private final EventBus events = EventBus.get();
+    /** Typed observers (e.g. the SMS/WhatsApp NotificationService). CopyOnWrite: API + UI threads. */
+    private final List<CrisisNotifier> notifiers = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     public CrisisService(OrganizationDao orgDao, ResourceDao resourceDao, EmergencyRequestDao requestDao,
                          AllocationDao allocationDao, MatchingEngine engine) {
@@ -52,6 +54,16 @@ public class CrisisService {
         this.requestDao = Objects.requireNonNull(requestDao);
         this.allocationDao = Objects.requireNonNull(allocationDao);
         this.engine = Objects.requireNonNull(engine);
+    }
+
+    public void addNotifier(CrisisNotifier n) { notifiers.add(Objects.requireNonNull(n)); }
+
+    /** Runs an observer callback; a failing listener is logged but never breaks the business operation. */
+    private void fire(java.util.function.Consumer<CrisisNotifier> call) {
+        for (CrisisNotifier n : notifiers) {
+            try { call.accept(n); }
+            catch (RuntimeException e) { LOG.warning("Notifier failed: " + e); }
+        }
     }
 
     // =====================================================================
@@ -75,6 +87,21 @@ public class CrisisService {
     }
 
     public List<Organization> organizations() { return orgDao.findAll(); }
+
+    public java.util.Optional<Organization> organization(int id) { return orgDao.findById(id); }
+
+    /** Deletes an organization; its resources are removed by ON DELETE CASCADE. */
+    public void deleteOrganization(int id) throws EntityNotFoundException, ValidationException {
+        Organization o = orgDao.findById(id).orElseThrow(() -> new EntityNotFoundException("Organization", id));
+        boolean hasDispatches = allocationDao.findAll().stream()
+                .anyMatch(a -> resourceDao.findById(a.getResourceId()).map(r -> r.getOrganizationId() == id).orElse(false));
+        if (hasDispatches) {
+            throw new ValidationException("'" + o.getName() + "' has dispatch history and cannot be deleted "
+                    + "(it would erase the record of who sent what). Remove its resources instead.");
+        }
+        orgDao.delete(id);
+        events.publish(new CrisisEvent(CrisisEvent.Type.ORGANIZATION_ADDED, o.getName() + " removed from the network"));
+    }
 
     // =====================================================================
     //  Resources
@@ -113,6 +140,8 @@ public class CrisisService {
 
     public List<Resource> resources() { return resourceDao.findAll(); }
 
+    public java.util.Optional<Resource> resource(int id) { return resourceDao.findById(id); }
+
     // =====================================================================
     //  Emergency requests
     // =====================================================================
@@ -133,6 +162,7 @@ public class CrisisService {
         requestDao.save(r);
         events.publish(new CrisisEvent(CrisisEvent.Type.REQUEST_CREATED,
                 "[" + r.getUrgency() + "] " + r.getTitle() + " - " + r.getCity() + " (via " + r.getSource() + ")"));
+        fire(n -> n.requestCreated(r));
         return r;
     }
 
@@ -142,7 +172,27 @@ public class CrisisService {
             throw new ValidationException("Only open requests can be cancelled (current: " + r.getStatus() + ")");
         }
         requestDao.updateProgress(id, r.getQuantityFulfilled(), RequestStatus.CANCELLED);
+        r.setStatus(RequestStatus.CANCELLED);
         events.publish(new CrisisEvent(CrisisEvent.Type.REQUEST_UPDATED, "Request cancelled: " + r.getTitle()));
+        fire(n -> n.requestCancelled(r));
+    }
+
+    /** Coordinator re-triage: raise or lower the urgency of an active request. */
+    public EmergencyRequest changeUrgency(int id, UrgencyLevel urgency) throws EntityNotFoundException, ValidationException {
+        EmergencyRequest r = requestDao.findById(id).orElseThrow(() -> new EntityNotFoundException("Request", id));
+        if (!r.getStatus().isActive()) throw new ValidationException("Only active requests can be re-prioritised");
+        Validator.start().notNull(urgency, "Urgency").validate();
+        requestDao.updateUrgency(id, urgency);
+        r.setUrgency(urgency);
+        events.publish(new CrisisEvent(CrisisEvent.Type.REQUEST_UPDATED, "Urgency of '" + r.getTitle() + "' set to " + urgency));
+        return r;
+    }
+
+    public java.util.Optional<EmergencyRequest> request(int id) { return requestDao.findById(id); }
+
+    /** Public tracking lookup (CC-XXXXXX). */
+    public java.util.Optional<EmergencyRequest> findByTrackingCode(String code) {
+        return requestDao.findByTrackingCode(code);
     }
 
     public List<EmergencyRequest> requests() { return requestDao.findAll(); }
@@ -212,6 +262,7 @@ public class CrisisService {
                 });
                 allocations += plans.size();
                 units += dispatched;
+                fire(n -> n.resourcesDispatched(req, plans));
                 if (req.getStatus() == RequestStatus.FULFILLED) full++; else partial++;
                 StringBuilder sb = new StringBuilder(head);
                 for (AllocationPlan p : plans) {

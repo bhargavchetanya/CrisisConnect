@@ -40,8 +40,18 @@ public final class AppConfig {
 
     public static AppConfig get() { return INSTANCE; }
 
+    /**
+     * Lookup order: JVM system property (-Dkey=value) -> environment variable -> properties file.
+     * The environment variable name is the key in upper case with dots replaced by underscores,
+     * e.g. {@code admin.password} -> {@code ADMIN_PASSWORD}. Cloud hosts such as Render inject
+     * secrets this way, so they never have to be committed to Git.
+     */
     public Optional<String> find(String key) {
-        return Optional.ofNullable(System.getProperty(key, props.getProperty(key)));
+        String sys = System.getProperty(key);
+        if (sys != null) return Optional.of(sys);
+        String env = System.getenv(key.toUpperCase().replace('.', '_').replace('-', '_'));
+        if (env != null && !env.isBlank()) return Optional.of(env);
+        return Optional.ofNullable(props.getProperty(key));
     }
 
     public String getString(String key, String def) { return find(key).orElse(def); }

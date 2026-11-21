@@ -44,7 +44,7 @@ Raise an SOS on the website → it pops up instantly on the desktop dashboard as
 ### Other commands
 | Command | Purpose |
 |---|---|
-| `mvn test` | Run the 12 JUnit 5 tests (engine, models, DAO + rollback) |
+| `mvn test` | Run the 26 JUnit 5 tests (engine, models, DAO + rollback, login & roles, tracking, SMS/WhatsApp alerts) |
 | `mvn compile exec:java` | Run only the REST API + website (no desktop window) |
 | `./run-web-only.command` | Same as above, double-clickable |
 
@@ -52,6 +52,34 @@ Raise an SOS on the website → it pops up instantly on the desktop dashboard as
 `Plugins → javafx → javafx:run`.
 
 **Reset the demo data:** close the app and delete the `data/` folder.
+
+---
+
+## 🔐 Accounts, roles, SOS tracking & alerts (v2)
+
+| Feature | What it does |
+|---|---|
+| **Login & roles** | Public visitors view live ops, raise and track an SOS. **Coordinators** run Smart Match and manage requests, resources and organizations. **Administrators** also approve coordinators, assign roles/organizations and read the audit log. |
+| **Sign-up flow** | Request access → 6-digit e-mail code (10 min, 5 tries) → administrator approves. Without an e-mail provider the code is shown on screen (demo mode). |
+| **Security** | PBKDF2-SHA256 password hashing (JDK only), random 24 h session tokens in an httpOnly SameSite cookie (only their SHA-256 is stored), 5 wrong passwords lock the account for 15 min, rate limiting, CSRF header check, audit log. Design ported from our *Partner in Project* platform. |
+| **SOS tracking** | Every SOS gets a tracking ID (e.g. `CC-7KQ4MZ`). `/track.html?code=…` shows status, place in the priority queue, a timeline of dispatches and the SMS sent to the reporter (phone masked). |
+| **SMS / WhatsApp simulation** | SOS received → SMS with tracking link · CRITICAL SOS → WhatsApp alert to organizations within 60 km · Smart Match → WhatsApp dispatch order to each supplying organization + "help is on the way" SMS with ETA · request closed → SMS. All messages are stored in the outbox (`notifications` table) and shown in the console. E-mails are really sent through **Brevo** when `BREVO_API_KEY` + `EMAIL_FROM` are set. |
+| **Web console** | `/admin.html`: overview + Smart Match, requests (re-prioritise / close), resources (add / restock / remove), organizations, SMS & WhatsApp outbox, users, audit log, change password. |
+
+**Accounts**
+- Administrator: `bhargavchetanya47@gmail.com` (from `ADMIN_EMAILS`). Its password comes from the `ADMIN_PASSWORD` environment variable; if that is not set, a random password is printed once in the server log at start-up.
+- Demo coordinator: `coordinator@demo.crisisconnect.in` / `DemoPass#2026` (turn off with `DEMO_ACCOUNTS=false`).
+
+**Environment variables** (override `config/app.properties`)
+
+| Variable | Purpose |
+|---|---|
+| `ADMIN_EMAILS` | comma-separated administrator e-mails |
+| `ADMIN_PASSWORD` | administrator password (set it in Render → Environment) |
+| `BREVO_API_KEY`, `EMAIL_FROM` | optional real e-mail delivery |
+| `APP_PUBLIC_URL` | link used in SMS/WhatsApp messages (on Render, `RENDER_EXTERNAL_URL` is used automatically) |
+
+Run locally with an admin password: `ADMIN_PASSWORD='YourPass123' mvn compile exec:java`
 
 ---
 
@@ -122,7 +150,10 @@ Generated at runtime: `data/` (database), `logs/` (rotating log files), `exports
 | GET | `/api/requests` · `/api/resources` · `/api/organizations` · `/api/allocations` | data lists |
 | GET | `/api/events` | live activity feed |
 | POST | `/api/requests` | raise an SOS (form-encoded; validated server-side) |
-| POST | `/api/match` | run the Smart Match engine |
+| POST | `/api/match` | run the Smart Match engine (coordinator login required) |
+| GET | `/api/track/{code}` | public SOS tracking |
+| POST | `/api/auth/register` · `verify` · `resend` · `login` · `logout` · `password` | accounts (GET `/api/auth/me`) |
+| GET/POST/DELETE | `/api/admin/...` | console: requests, resources, organizations, outbox, users, audit |
 
 ---
 

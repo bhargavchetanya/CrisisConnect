@@ -6,3 +6,15 @@ services:
     plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/stats
+    envVars:
+      # Administrator account(s), created automatically at start-up
+      - key: ADMIN_EMAILS
+        value: bhargavchetanya47@gmail.com
+      # Set these in the Render dashboard (Environment tab) - never commit secrets
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Optional: real e-mail (verification codes, approvals) through Brevo
+      - key: BREVO_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false

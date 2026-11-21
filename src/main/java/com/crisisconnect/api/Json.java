@@ -1,6 +1,10 @@
 package com.crisisconnect.api;
 
 import com.crisisconnect.model.Allocation;
+import com.crisisconnect.model.AuditEntry;
+import com.crisisconnect.model.Notification;
+import com.crisisconnect.model.User;
+import com.crisisconnect.util.Security;
 import com.crisisconnect.model.EmergencyRequest;
 import com.crisisconnect.model.Organization;
 import com.crisisconnect.model.Resource;
@@ -175,6 +179,69 @@ public final class Json {
         m.put("failed", r.failedTransactions());
         m.put("durationMs", r.durationMs());
         m.put("log", r.log());
+        return m;
+    }
+
+    // ---------------- v2: accounts, outbox, audit, admin views ----------------
+    /** Request as coordinators see it (adds contact phone and tracking code). */
+    public static Map<String, Object> admin(EmergencyRequest r) {
+        Map<String, Object> m = of(r);
+        m.put("trackingCode", r.getTrackingCode());
+        m.put("phone", r.getContactPhone());
+        m.put("remaining", r.remainingQuantity());
+        return m;
+    }
+
+    public static Map<String, Object> of(User u) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", u.getId());
+        m.put("email", u.getEmail());
+        m.put("name", u.getName());
+        m.put("role", u.getRole().name());
+        m.put("roleLabel", u.getRole().getLabel());
+        m.put("status", u.getStatus().name());
+        m.put("organizationId", u.getOrganizationId());
+        m.put("organization", u.getOrganizationName());
+        m.put("emailVerified", u.isEmailVerified());
+        m.put("lastLoginAt", u.getLastLoginAt() == null ? null : u.getLastLoginAt().toString());
+        m.put("createdAt", u.getCreatedAt().toString());
+        return m;
+    }
+
+    public static Map<String, Object> of(Notification n) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", n.getId());
+        m.put("channel", n.getChannel().name());
+        m.put("channelLabel", n.getChannel().getLabel());
+        m.put("to", n.getRecipient());
+        m.put("toName", n.getRecipientName());
+        m.put("message", n.getMessage());
+        m.put("event", n.getEvent());
+        m.put("requestId", n.getRequestId());
+        m.put("status", n.getStatus().name());
+        m.put("createdAt", n.getCreatedAt().toString());
+        return m;
+    }
+
+    /** Public version for the tracking page: recipient masked. */
+    public static Map<String, Object> publicMessage(Notification n) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("channel", n.getChannel().name());
+        m.put("to", Security.mask(n.getRecipient()));
+        m.put("message", n.getMessage());
+        m.put("event", n.getEvent());
+        m.put("createdAt", n.getCreatedAt().toString());
+        return m;
+    }
+
+    public static Map<String, Object> of(AuditEntry a) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", a.getId());
+        m.put("actor", a.getActor());
+        m.put("action", a.getAction());
+        m.put("details", a.getDetails());
+        m.put("ip", a.getIp());
+        m.put("createdAt", a.getCreatedAt().toString());
         return m;
     }
 }

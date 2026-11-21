@@ -8,6 +8,7 @@ import com.crisisconnect.model.GeoLocation;
 import com.crisisconnect.model.RequestStatus;
 import com.crisisconnect.model.ResourceType;
 import com.crisisconnect.model.UrgencyLevel;
+import com.crisisconnect.util.TrackingCodes;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -35,20 +36,23 @@ public class JdbcEmergencyRequestDao implements EmergencyRequestDao {
         r.setVulnerableGroups(rs.getInt("vulnerable_groups") == 1);
         r.setSource(rs.getString("source"));
         r.setCreatedAt(LocalDateTime.parse(rs.getString("created_at")));
+        r.setTrackingCode(rs.getString("tracking_code"));
         return r;
     }
 
     @Override
     public EmergencyRequest save(EmergencyRequest r) {
+        if (r.getTrackingCode() == null) r.setTrackingCode(TrackingCodes.next());
         int id = jdbc.insert("""
                 INSERT INTO emergency_requests(title, disaster_type, resource_type, quantity_needed, quantity_fulfilled,
                     people_affected, urgency, city, latitude, longitude, status, contact_phone, vulnerable_groups,
-                    source, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    source, created_at, tracking_code)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 r.getTitle(), r.getDisasterType().name(), r.getResourceType().name(), r.getQuantityNeeded(),
                 r.getQuantityFulfilled(), r.getPeopleAffected(), r.getUrgency().name(), r.getCity(),
                 r.getLocation().getLatitude(), r.getLocation().getLongitude(), r.getStatus().name(),
-                r.getContactPhone(), r.isVulnerableGroups() ? 1 : 0, r.getSource(), r.getCreatedAt().toString());
+                r.getContactPhone(), r.isVulnerableGroups() ? 1 : 0, r.getSource(), r.getCreatedAt().toString(),
+                r.getTrackingCode());
         r.setId(id);
         return r;
     }
@@ -96,6 +100,16 @@ public class JdbcEmergencyRequestDao implements EmergencyRequestDao {
     public List<EmergencyRequest> findByStatus(RequestStatus status) {
         return jdbc.query("SELECT * FROM emergency_requests WHERE status=?", JdbcEmergencyRequestDao::map,
                 status.name());
+    }
+
+    @Override
+    public Optional<EmergencyRequest> findByTrackingCode(String code) {
+        return jdbc.queryOne("SELECT * FROM emergency_requests WHERE tracking_code=?", JdbcEmergencyRequestDao::map, code);
+    }
+
+    @Override
+    public boolean updateUrgency(int requestId, UrgencyLevel urgency) {
+        return jdbc.update("UPDATE emergency_requests SET urgency=? WHERE id=?", urgency.name(), requestId) == 1;
     }
 
     @Override

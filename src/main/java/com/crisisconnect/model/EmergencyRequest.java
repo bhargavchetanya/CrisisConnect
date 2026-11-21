@@ -23,6 +23,7 @@ public class EmergencyRequest extends BaseEntity implements Comparable<Emergency
     private String contactPhone;
     private boolean vulnerableGroups;   // children / elderly / pregnant women present
     private String source = "DESKTOP";  // DESKTOP, WEB, CSV
+    private String trackingCode;        // public tracking ID, e.g. CC-7KQ4MZ (set when saved)
 
     public EmergencyRequest() { }
 
@@ -112,4 +113,6 @@ public class EmergencyRequest extends BaseEntity implements Comparable<Emergency
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }
     public String getCity() { return location == null ? "" : location.getCity(); }
+    public String getTrackingCode() { return trackingCode; }
+    public void setTrackingCode(String trackingCode) { this.trackingCode = trackingCode; }
 }

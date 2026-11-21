@@ -147,8 +147,7 @@
     },
     async match() {
       if (mode !== "live") return demo.match();
-      const res = await fetch(base + "/api/match", { method: "POST" });
-      return res.json();
+      return window.CC.api(base + "/api/match", { method: "POST" });     // needs a coordinator session
     }
   };
 
@@ -368,6 +367,10 @@
   // ------------------------------------------------------------------ smart match
   async function runMatch() {
     const btn = $("#matchBtn"), out = $("#console");
+    if (mode === "live" && !currentUser) {          // public visitors: Smart Match is for coordinators
+      location.href = "/login.html?next=" + encodeURIComponent("/#live");
+      return;
+    }
     btn.disabled = true;
     out.textContent = "> running smart match...\n";
     try {
@@ -386,6 +389,7 @@
     } catch (e) {
       out.textContent += "> ERROR: " + e.message;
       toast("Matching failed", e.message, "err");
+      if (e.status === 401) setTimeout(() => location.href = "/login.html?next=" + encodeURIComponent("/#live"), 900);
     } finally {
       btn.disabled = false;
     }
@@ -426,9 +430,50 @@
       toast("SOS received", `${result.data.title} — priority ${Number(result.data.priority).toFixed(1)}`);
       form.reset();
       preview();
+      showTracking(result.data);
       await refresh();
-      document.querySelector("#live").scrollIntoView({ behavior: "smooth" });
     });
+  }
+
+  // ------------------------------------------------------------------ tracking card after an SOS
+  function showTracking(r) {
+    const done = $("#sosDone"), form = $("#sosForm");
+    if (!r.trackingCode) {                       // demo mode (no Java server): no tracking IDs
+      document.querySelector("#live").scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    const url = "/track.html?code=" + encodeURIComponent(r.trackingCode);
+    done.innerHTML = `<span class="ic">✅</span>
+      <div><div class="muted">SOS received — your tracking ID</div>
+        <span class="code-big">${escapeHtml(r.trackingCode)}</span>
+        <div class="muted small">Priority score ${Number(r.priority).toFixed(1)} · ${escapeHtml(r.city)}</div></div>
+      ${r.smsSent ? `<div class="notice ok">📱 We sent this ID to your phone by SMS (simulated) and will text you as help is dispatched.</div>`
+                  : `<div class="notice warn">No phone number given — note this ID down to follow your request.</div>`}
+      <div class="cta" style="margin:0;justify-content:center">
+        <a class="btn btn-red" href="${url}">🔎 Track this SOS</a>
+        <button class="btn btn-ghost" type="button" id="copyCode">Copy ID</button>
+        <button class="btn btn-ghost" type="button" id="newSos">Raise another</button>
+      </div>`;
+    form.hidden = true;
+    done.hidden = false;
+    $("#copyCode").onclick = () => navigator.clipboard?.writeText(r.trackingCode).then(() => toast("Copied", r.trackingCode));
+    $("#newSos").onclick = () => { done.hidden = true; form.hidden = false; };
+    done.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  // ------------------------------------------------------------------ session (login state)
+  let currentUser = null;
+  async function setupSession() {
+    if (mode !== "live") { $("#authSlot").innerHTML = ""; return; }
+    currentUser = await window.CC.renderAuthSlot($("#authSlot"));
+    const btn = $("#matchBtn");
+    if (!currentUser) {
+      btn.textContent = "🔒 Coordinator login to run";
+      btn.title = "Smart Match dispatches real stock, so only logged-in coordinators can run it";
+      $("#console").textContent = "> Smart Match is restricted to logged-in coordinators.\n> Public visitors can watch live operations, raise an SOS and track it.";
+    } else {
+      $("#console").textContent = `> Logged in as ${currentUser.name} (${currentUser.roleLabel}). Press "Run Smart Match" to dispatch resources.`;
+    }
   }
 
   // ------------------------------------------------------------------ boot
@@ -437,6 +482,7 @@
     document.querySelectorAll("#navLinks a").forEach(a => a.addEventListener("click", () => $("#navLinks").classList.remove("open")));
     $("#matchBtn").addEventListener("click", runMatch);
     await detectServer();
+    await setupSession();
     await setupForm();
     await refresh();
     if (mode === "live") setInterval(refresh, 5000);     // poll the API for changes made in the desktop app

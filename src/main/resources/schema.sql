@@ -58,3 +58,65 @@ CREATE TABLE IF NOT EXISTS allocations (
 CREATE INDEX IF NOT EXISTS idx_resources_type   ON resources(type);
 CREATE INDEX IF NOT EXISTS idx_requests_status  ON emergency_requests(status);
 CREATE INDEX IF NOT EXISTS idx_alloc_request    ON allocations(request_id);
+
+-- =====================================================================
+--  v2: accounts, sessions, SOS tracking, notification outbox, audit log
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS users (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    email           TEXT    NOT NULL UNIQUE,
+    name            TEXT    NOT NULL,
+    password_hash   TEXT    NOT NULL,
+    role            TEXT    NOT NULL DEFAULT 'COORDINATOR',
+    status          TEXT    NOT NULL DEFAULT 'PENDING',
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+    email_verified  INTEGER NOT NULL DEFAULT 0,
+    failed_logins   INTEGER NOT NULL DEFAULT 0,
+    lock_until      TEXT,
+    last_login_at   TEXT,
+    created_at      TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash  TEXT    PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at  TEXT    NOT NULL,
+    user_agent  TEXT,
+    created_at  TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS email_codes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash   TEXT    NOT NULL,
+    expires_at  TEXT    NOT NULL,
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel         TEXT    NOT NULL,
+    recipient       TEXT    NOT NULL,
+    recipient_name  TEXT,
+    message         TEXT    NOT NULL,
+    event           TEXT    NOT NULL,
+    request_id      INTEGER REFERENCES emergency_requests(id) ON DELETE SET NULL,
+    status          TEXT    NOT NULL,
+    created_at      TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor       TEXT    NOT NULL,
+    action      TEXT    NOT NULL,
+    details     TEXT,
+    ip          TEXT,
+    created_at  TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user      ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_notif_request      ON notifications(request_id);
+CREATE INDEX IF NOT EXISTS idx_notif_created      ON notifications(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_created      ON audit_log(created_at)
