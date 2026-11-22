@@ -15,12 +15,12 @@
   <aside class="side">
     <a class="brand" href="/"><span class="brand-mark">+</span><span>Crisis<b>Connect</b></span></a>
     <a class="tab" href="#overview" data-tab="overview">📊 Overview</a>
-    <a class="tab" href="#requests" data-tab="requests">🚨 Requests</a>
-    <a class="tab" href="#resources" data-tab="resources">📦 Resources</a>
+    <a class="tab" href="#requests" data-tab="requests">🚨 Requests <span class="count" id="verifyCount" hidden></span></a>
+    <a class="tab no-officer" href="#resources" data-tab="resources">📦 Resources</a>
     <a class="tab staff-only" href="#organizations" data-tab="organizations">🏥 Organizations</a>
     <a class="tab staff-only" href="#outbox" data-tab="outbox">💬 WhatsApp &amp; E-mail</a>
-    <div class="sep admin-only">Administration</div>
-    <a class="tab admin-only" href="#users" data-tab="users">👥 Users <span class="count" id="pendingCount" hidden></span></a>
+    <div class="sep manager-only">Administration</div>
+    <a class="tab manager-only" href="#users" data-tab="users">👥 Users <span class="count" id="pendingCount" hidden></span></a>
     <a class="tab admin-only" href="#audit" data-tab="audit">🧾 Audit log</a>
     <div class="sep">Account</div>
     <a class="tab" href="#account" data-tab="account">⚙️ My account</a>
@@ -39,6 +39,15 @@
     <!-- OVERVIEW -->
     <section class="view" id="v-overview">
       <div class="alert-bar" id="pendingBar" hidden><span>👥 <b id="pendingText"></b></span><a class="btn btn-ghost btn-xs" href="#users">Review</a></div>
+      <div class="alert-bar verify-bar" id="verifyBar" hidden><span>🏛️ <b id="verifyText"></b></span><a class="btn btn-ghost btn-xs" href="#requests">Verify now</a></div>
+      <div class="panel officer-only" style="margin-bottom:18px">
+        <div class="panel-head"><h3>How verification works</h3><span class="muted small" id="officerCityNote"></span></div>
+        <ol class="org-steps">
+          <li><b>A citizen raises an SOS</b> in your city - it waits as <i>Waiting for verification</i>, and you get an e-mail.</li>
+          <li><b>Call the reporter</b> on the phone number shown in the <a href="#requests">Requests</a> tab and check the details.</li>
+          <li><b>Verify</b> a genuine SOS - relief can then be dispatched with Smart Match - or <b>reject</b> a fake one with a reason. Every decision is in the audit log.</li>
+        </ol>
+      </div>
       <div class="kpis">
         <div class="kpi k-blue"><b id="oActive">–</b><span>Active requests</span></div>
         <div class="kpi k-red"><b id="oCritical">–</b><span>Critical now</span></div>
@@ -72,13 +81,13 @@
     <section class="view" id="v-requests">
       <div class="toolbar">
         <div class="chips" id="reqFilter">
-          <button data-f="active" class="on">Active</button><button data-f="all">All</button>
+          <button data-f="verify">To verify</button><button data-f="active" class="on">Active</button><button data-f="all">All</button>
           <button data-f="FULFILLED">Fulfilled</button><button data-f="CANCELLED">Cancelled</button>
         </div>
         <input class="inp" id="reqSearch" placeholder="Search title, city or tracking ID…" style="max-width:320px">
       </div>
       <div class="panel"><div class="table-wrap"><table class="table">
-        <thead><tr><th>Tracking</th><th>Request</th><th>City</th><th>Urgency</th><th>Progress</th><th>Reporter</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Tracking</th><th>Request</th><th>City</th><th>Urgency</th><th>Progress</th><th>Reporter</th><th>Verification</th><th>Status</th><th></th></tr></thead>
         <tbody id="reqBody"></tbody></table></div></div>
     </section>
 
@@ -138,7 +147,7 @@
         <div id="pendingList"></div>
       </div>
       <div class="panel"><div class="table-wrap"><table class="table">
-        <thead><tr><th>User</th><th>Role</th><th>Organization</th><th>Status</th><th>Last login</th><th></th></tr></thead>
+        <thead><tr><th>User</th><th>Role</th><th>Organization / city</th><th>Status</th><th>Last login</th><th></th></tr></thead>
         <tbody id="userBody"></tbody></table></div></div>
     </section>
 

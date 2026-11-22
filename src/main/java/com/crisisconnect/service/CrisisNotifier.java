@@ -20,6 +20,12 @@ public interface CrisisNotifier {
 
     default void requestCancelled(EmergencyRequest request) { }
 
+    /** An officer / coordinator confirmed that an SOS is genuine - it can now receive resources. */
+    default void requestVerified(EmergencyRequest request) { }
+
+    /** An officer / coordinator rejected an SOS as not genuine (it is closed). */
+    default void requestRejected(EmergencyRequest request) { }
+
     /** Called once after every Smart Match run. */
     default void matchCompleted(MatchReport report) { }
 

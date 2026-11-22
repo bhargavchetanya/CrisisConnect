@@ -20,4 +20,8 @@ public interface EmergencyRequestDao extends GenericDao<EmergencyRequest, Intege
     Optional<EmergencyRequest> findByTrackingCode(String code);
 
     boolean updateUrgency(int requestId, UrgencyLevel urgency);
+
+    /** Records an officer's decision on an SOS. */
+    boolean updateVerification(int requestId, com.crisisconnect.model.Verification verification, String by,
+                               java.time.LocalDateTime at, String note);
 }

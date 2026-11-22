@@ -5,6 +5,7 @@ import com.crisisconnect.service.CrisisService;
 import com.crisisconnect.model.OrganizationType;
 import com.crisisconnect.model.Organization;
 import com.crisisconnect.exception.AuthException;
+import com.crisisconnect.model.Role;
 import com.crisisconnect.model.User;
 import com.crisisconnect.service.AuditService;
 import com.crisisconnect.service.AuthService;
@@ -90,6 +91,18 @@ final class AuthApi {
            })
            .secure("POST", "/api/auth/register", c -> {
                limit(c, "register");
+               if ("officer".equals(c.field("accountType"))) {   // government verification officer
+                   User off = auth.registerOfficer(c.field("name"), c.field("email"), c.form().get("password"),
+                           c.field("officerCity"), c.field("designation"), c.ip());
+                   Map<String, Object> out = new LinkedHashMap<>();
+                   out.put("ok", true);
+                   out.put("email", off.getEmail());
+                   out.put("needsCode", false);
+                   out.put("message", "Request sent. An administrator or coordinator will confirm you as the verification officer for "
+                           + off.getCity() + " - you will get an e-mail at " + off.getEmail() + " once it is approved.");
+                   c.status(201);
+                   return out;
+               }
                Integer orgId = c.optionalInt("organizationId");
                Organization created = null;
                if (!c.field("newOrgName").isEmpty()) {          // "my organization is not listed"
@@ -164,7 +177,8 @@ final class AuthApi {
     static Map<String, Object> session(User u) {
         Map<String, Object> m = Json.of(u);
         m.put("canManageUsers", u.isAdmin());
-        m.put("canRunMatch", true);
+        m.put("canRunMatch", u.getRole().atLeast(Role.COORDINATOR));
+        m.put("canVerify", u.getRole() == Role.OFFICER || u.getRole().atLeast(Role.COORDINATOR));
         return m;
     }
 }

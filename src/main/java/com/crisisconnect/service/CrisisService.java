@@ -17,9 +17,11 @@ import com.crisisconnect.model.RequestStatus;
 import com.crisisconnect.model.Resource;
 import com.crisisconnect.model.ResourceType;
 import com.crisisconnect.model.UrgencyLevel;
+import com.crisisconnect.model.Verification;
 import com.crisisconnect.util.CollectionUtils;
 import com.crisisconnect.util.Validator;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -183,6 +185,45 @@ public class CrisisService {
         fire(n -> n.requestCancelled(r));
     }
 
+    // =====================================================================
+    //  SOS verification (government officers / coordinators)
+    // =====================================================================
+    /** Confirms that an SOS is genuine: from now on Smart Match may dispatch to it. */
+    public EmergencyRequest verifyRequest(int id, String by, String note) throws EntityNotFoundException, ValidationException {
+        EmergencyRequest r = requestDao.findById(id).orElseThrow(() -> new EntityNotFoundException("Request", id));
+        if (r.getVerification() != Verification.UNVERIFIED) {
+            throw new ValidationException("This SOS was already " + r.getVerification().getLabel().toLowerCase());
+        }
+        if (!r.getStatus().isActive()) throw new ValidationException("This SOS is no longer open");
+        r.setVerification(Verification.VERIFIED);
+        r.setVerifiedBy(by);
+        r.setVerifiedAt(LocalDateTime.now());
+        r.setVerificationNote(note == null || note.isBlank() ? null : note.trim());
+        requestDao.updateVerification(id, r.getVerification(), by, r.getVerifiedAt(), r.getVerificationNote());
+        events.publish(new CrisisEvent(CrisisEvent.Type.REQUEST_UPDATED, "SOS verified: " + r.getTitle() + " - " + r.getCity()));
+        fire(n -> n.requestVerified(r));
+        return r;
+    }
+
+    /** Rejects an SOS as not genuine: it is closed and never receives resources. */
+    public EmergencyRequest rejectRequest(int id, String by, String reason) throws EntityNotFoundException, ValidationException {
+        EmergencyRequest r = requestDao.findById(id).orElseThrow(() -> new EntityNotFoundException("Request", id));
+        if (r.getVerification() != Verification.UNVERIFIED) {
+            throw new ValidationException("This SOS was already " + r.getVerification().getLabel().toLowerCase());
+        }
+        Validator.start().notBlank(reason, "Reason").validate();
+        r.setVerification(Verification.REJECTED);
+        r.setVerifiedBy(by);
+        r.setVerifiedAt(LocalDateTime.now());
+        r.setVerificationNote(reason.trim());
+        requestDao.updateVerification(id, r.getVerification(), by, r.getVerifiedAt(), r.getVerificationNote());
+        requestDao.updateProgress(id, r.getQuantityFulfilled(), RequestStatus.CANCELLED);
+        r.setStatus(RequestStatus.CANCELLED);
+        events.publish(new CrisisEvent(CrisisEvent.Type.REQUEST_UPDATED, "SOS rejected as not genuine: " + r.getTitle()));
+        fire(n -> n.requestRejected(r));
+        return r;
+    }
+
     /** Coordinator re-triage: raise or lower the urgency of an active request. */
     public EmergencyRequest changeUrgency(int id, UrgencyLevel urgency) throws EntityNotFoundException, ValidationException {
         EmergencyRequest r = requestDao.findById(id).orElseThrow(() -> new EntityNotFoundException("Request", id));
@@ -220,7 +261,9 @@ public class CrisisService {
     // =====================================================================
     /** Preview only - nothing is written. */
     public MatchResult previewMatching() {
-        return engine.plan(requestDao.findActive(), resourceDao.findAvailable());
+        List<EmergencyRequest> verified = new ArrayList<>(requestDao.findActive());
+        verified.removeIf(r -> !r.isVerified());          // unverified SOS wait for an officer
+        return engine.plan(verified, resourceDao.findAvailable());
     }
 
     /**

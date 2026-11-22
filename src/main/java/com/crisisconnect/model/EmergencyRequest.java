@@ -24,6 +24,10 @@ public class EmergencyRequest extends BaseEntity implements Comparable<Emergency
     private boolean vulnerableGroups;   // children / elderly / pregnant women present
     private String source = "DESKTOP";  // DESKTOP, WEB, CSV
     private String trackingCode;        // public tracking ID, e.g. CC-7KQ4MZ (set when saved)
+    private Verification verification = Verification.VERIFIED;   // public SOS: UNVERIFIED until an officer checks it
+    private String verifiedBy;          // e-mail of the officer / coordinator who decided
+    private LocalDateTime verifiedAt;
+    private String verificationNote;    // e.g. "called reporter, confirmed" or the rejection reason
 
     public EmergencyRequest() { }
 
@@ -115,4 +119,13 @@ public class EmergencyRequest extends BaseEntity implements Comparable<Emergency
     public String getCity() { return location == null ? "" : location.getCity(); }
     public String getTrackingCode() { return trackingCode; }
     public void setTrackingCode(String trackingCode) { this.trackingCode = trackingCode; }
+    public Verification getVerification() { return verification; }
+    public void setVerification(Verification verification) { this.verification = verification; }
+    public boolean isVerified() { return verification == Verification.VERIFIED; }
+    public String getVerifiedBy() { return verifiedBy; }
+    public void setVerifiedBy(String verifiedBy) { this.verifiedBy = verifiedBy; }
+    public LocalDateTime getVerifiedAt() { return verifiedAt; }
+    public void setVerifiedAt(LocalDateTime verifiedAt) { this.verifiedAt = verifiedAt; }
+    public String getVerificationNote() { return verificationNote; }
+    public void setVerificationNote(String verificationNote) { this.verificationNote = verificationNote; }
 }

@@ -120,6 +120,24 @@ public final class DatabaseManager {
         if (!hasError) {
             try (Statement st = c.createStatement()) { st.execute("ALTER TABLE notifications ADD COLUMN error TEXT"); }
         }
+        // v4: SOS verification by government officers (existing requests count as verified)
+        addColumnIfMissing(c, "emergency_requests", "verification", "TEXT NOT NULL DEFAULT 'VERIFIED'");
+        addColumnIfMissing(c, "emergency_requests", "verified_by", "TEXT");
+        addColumnIfMissing(c, "emergency_requests", "verified_at", "TEXT");
+        addColumnIfMissing(c, "emergency_requests", "verification_note", "TEXT");
+        addColumnIfMissing(c, "users", "city", "TEXT");
+        addColumnIfMissing(c, "users", "designation", "TEXT");
+    }
+
+    private static void addColumnIfMissing(Connection c, String table, String column, String type) throws SQLException {
+        try (Statement st = c.createStatement();
+             java.sql.ResultSet rs = st.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) if (column.equalsIgnoreCase(rs.getString("name"))) return;
+        }
+        try (Statement st = c.createStatement()) {
+            st.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
+        }
+        LOG.info("Migration: added " + table + "." + column);
     }
 
     /** Character-stream reading of a classpath file (Unit 3 - I/O). */

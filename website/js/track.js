@@ -29,7 +29,9 @@
   }
 
   function render(t) {
-    const [label, color] = STATUS[t.status] || [t.status, "#8e9ab8"];
+    let [label, color] = STATUS[t.status] || [t.status, "#8e9ab8"];
+    if (t.verification === "UNVERIFIED" && t.status === "OPEN") [label, color] = ["Waiting for verification", "#f5c518"];
+    if (t.verification === "REJECTED") [label, color] = ["Could not be verified", "#ff4757"];
     const queue = t.queuePosition ? `#${t.queuePosition} of ${t.queueLength}` : "—";
     $("#result").innerHTML = `<div class="track-card">
       <div class="panel">

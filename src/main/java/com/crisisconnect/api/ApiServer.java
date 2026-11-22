@@ -16,6 +16,8 @@ import com.crisisconnect.model.RequestStatus;
 import com.crisisconnect.model.ResourceType;
 import com.crisisconnect.model.Role;
 import com.crisisconnect.model.UrgencyLevel;
+import com.crisisconnect.model.UserStatus;
+import com.crisisconnect.model.Verification;
 import com.crisisconnect.service.AuditService;
 import com.crisisconnect.service.AuthService;
 import com.crisisconnect.service.CrisisService;
@@ -146,7 +148,19 @@ public class ApiServer {
         r.setContactPhone(f.get("phone"));
         r.setVulnerableGroups("true".equals(f.get("vulnerable")) || "on".equals(f.get("vulnerable")));
         r.setSource("WEB");
+        // public SOS: checked by the city's verification officer first; staff-raised SOS are trusted
+        boolean staff = c.user().map(u -> u.getRole().atLeast(Role.COORDINATOR) && u.getStatus() == UserStatus.ACTIVE).orElse(false);
+        if (!staff && (r.getContactPhone() == null || r.getContactPhone().replaceAll("[^0-9]", "").length() < 10)) {
+            throw new ValidationException("Please give a 10-digit phone number - a local officer calls it to verify your SOS");
+        }
+        r.setVerification(staff ? Verification.VERIFIED : Verification.UNVERIFIED);
+        if (staff) {
+            r.setVerifiedBy(c.user().get().getEmail());
+            r.setVerifiedAt(java.time.LocalDateTime.now());
+            r.setVerificationNote("raised by CrisisConnect staff");
+        }
         service.createRequest(r);
+        if (!r.isVerified()) notifications.askOfficersToVerify(r, auth.activeOfficersFor(r.getCity()));
         audit.log(c.user().map(u -> u.getEmail()).orElse("public"), "SOS_RAISED",
                 r.getTrackingCode() + " [" + r.getUrgency() + "] " + r.getTitle() + " - " + r.getCity(), c.ip());
         Map<String, Object> out = Json.of(r);
@@ -180,6 +194,8 @@ public class ApiServer {
         m.put("lat", r.getLocation().getLatitude());
         m.put("lon", r.getLocation().getLongitude());
         m.put("status", r.getStatus().name());
+        m.put("verification", r.getVerification().name());
+        m.put("verificationLabel", r.getVerification().getLabel());
         m.put("createdAt", r.getCreatedAt().toString());
         m.put("phone", Security.mask(r.getContactPhone()));
 
@@ -200,6 +216,16 @@ public class ApiServer {
         List<Map<String, Object>> timeline = new ArrayList<>();
         timeline.add(step(r.getCreatedAt().toString(), "received", "SOS received",
                 String.format("Priority score %.1f · %s", r.priorityScore(), r.getUrgency())));
+        if (r.getVerification() == Verification.UNVERIFIED) {
+            timeline.add(step(r.getCreatedAt().toString(), "pending", "Waiting for verification",
+                    "A government officer of " + r.getCity() + " will check your SOS - keep your phone reachable"));
+        } else if (r.getVerifiedAt() != null && r.getVerification() == Verification.VERIFIED) {
+            timeline.add(step(r.getVerifiedAt().toString(), "verified", "Verified",
+                    "Confirmed as genuine - relief can now be dispatched"));
+        } else if (r.getVerification() == Verification.REJECTED) {
+            timeline.add(step(r.getVerifiedAt() == null ? r.getCreatedAt().toString() : r.getVerifiedAt().toString(), "closed",
+                    "Could not be verified", "The local officer closed this SOS. Raise a new SOS with correct details or call 112."));
+        }
         for (Allocation a : allocs) {
             timeline.add(step(a.getCreatedAt().toString(), "dispatched", "Help dispatched",
                     String.format("%d %s of %s from %s · %s · ETA ~%d min", a.getQuantity(), r.getResourceType().getUnit(),
@@ -209,7 +235,7 @@ public class ApiServer {
         if (r.getStatus() == RequestStatus.FULFILLED) {
             String when = allocs.isEmpty() ? r.getCreatedAt().toString() : allocs.get(allocs.size() - 1).getCreatedAt().toString();
             timeline.add(step(when, "fulfilled", "Fully covered", "Everything requested has been dispatched"));
-        } else if (r.getStatus() == RequestStatus.CANCELLED) {
+        } else if (r.getStatus() == RequestStatus.CANCELLED && r.getVerification() != Verification.REJECTED) {
             String when = msgs.stream().filter(n -> "REQUEST_CLOSED".equals(n.getEvent())).map(n -> n.getCreatedAt().toString())
                     .findFirst().orElse(r.getCreatedAt().toString());
             timeline.add(step(when, "closed", "Closed by a coordinator", "Raise a new SOS if you still need help"));

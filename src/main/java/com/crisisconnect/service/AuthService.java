@@ -187,6 +187,48 @@ public class AuthService {
         return new Registration(u, showDevCodes && !notifications.emailEnabled() ? code : null);
     }
 
+    /**
+     * A government verification officer asks for access. Like organizations, no code e-mail: the request goes to the
+     * administrators (an admin or coordinator approves it once), and the first e-mail the officer gets is the approval.
+     */
+    public User registerOfficer(String name, String email, String password, String city, String designation, String ip)
+            throws ValidationException {
+        String mail = normEmail(email);
+        Validator.start()
+                .notBlank(name, "Name")
+                .notBlank(mail, "E-mail")
+                .email(mail, "E-mail")
+                .notBlank(designation, "Designation / department")
+                .validate();
+        checkPasswordStrength(password);
+        if (name.trim().length() > 80) throw new ValidationException("Name must be at most 80 characters");
+        if (designation.trim().length() > 100) throw new ValidationException("Designation must be at most 100 characters");
+        String cityName = com.crisisconnect.util.CityDirectory.find(city).map(g -> g.getCity())
+                .orElseThrow(() -> new ValidationException("Please choose the city you verify SOS requests for"));
+        if (isAdminEmail(mail)) throw new ValidationException("This e-mail already has an administrator account. Log in instead.");
+        if (users.findByEmail(mail).isPresent()) {
+            throw new ValidationException("This e-mail is already registered. Log in instead, or use a different e-mail.");
+        }
+        User u = new User(mail, name.trim(), Security.hashPassword(password));
+        u.setRole(Role.OFFICER);
+        u.setCity(cityName);
+        u.setDesignation(designation.trim());
+        u.setEmailVerified(true);
+        users.save(u);
+        audit.log(mail, "SIGN_UP", "requested verification-officer access for " + cityName, ip);
+        notifications.newSignupForAdmins(u.getName(), mail,
+                "Verification officer - " + u.getDesignation() + ", " + cityName, "officer request");
+        return u;
+    }
+
+    /** Active verification officers of a city (they get an e-mail for every new SOS there). */
+    public List<User> activeOfficersFor(String city) {
+        return users.findAll().stream()
+                .filter(u -> u.getRole() == Role.OFFICER && u.getStatus() == UserStatus.ACTIVE)
+                .filter(u -> u.getCity() != null && u.getCity().equalsIgnoreCase(city == null ? "" : city.trim()))
+                .toList();
+    }
+
     private String issueCode(User u) {
         String code = Security.sixDigitCode();
         users.deleteEmailCodes(u.getId());
@@ -386,6 +428,7 @@ public class AuthService {
 
     public User approve(User admin, int id, String ip) throws EntityNotFoundException, ValidationException {
         User u = users.findById(id).orElseThrow(() -> new EntityNotFoundException("User", id));
+        requireCanManage(admin, u);
         if (!u.isEmailVerified()) throw new ValidationException(u.getEmail() + " has not verified their e-mail yet");
         if (u.getStatus() == UserStatus.ACTIVE) return u;
         u.setStatus(UserStatus.ACTIVE);
@@ -397,6 +440,7 @@ public class AuthService {
 
     public User setStatus(User admin, int id, UserStatus status, String ip) throws EntityNotFoundException, ValidationException {
         User u = protectedTarget(admin, id);
+        requireCanManage(admin, u);
         u.setStatus(status);
         users.update(u);
         if (status != UserStatus.ACTIVE) users.deleteSessionsFor(u.getId());     // kick them out immediately
@@ -423,8 +467,21 @@ public class AuthService {
 
     public void deleteUser(User admin, int id, String ip) throws EntityNotFoundException, ValidationException {
         User u = protectedTarget(admin, id);
+        requireCanManage(admin, u);
         users.delete(id);
         audit.log(admin.getEmail(), "USER_DELETED", u.getEmail(), ip);
+    }
+
+    /** Users a coordinator may manage: verification officers only. Administrators manage everyone. */
+    public List<User> listOfficers() {
+        return users.findAll().stream().filter(u -> u.getRole() == Role.OFFICER).toList();
+    }
+
+    /** Administrators manage every account; coordinators may approve / disable / remove verification officers only. */
+    private static void requireCanManage(User actor, User target) throws ValidationException {
+        if (actor.isAdmin()) return;
+        if (actor.getRole() == Role.COORDINATOR && target.getRole() == Role.OFFICER) return;
+        throw new ValidationException("Only an administrator can manage " + target.getRole().getLabel().toLowerCase() + " accounts");
     }
 
     /** Administrators cannot lock themselves out, and bootstrap administrators cannot be changed from the web. */

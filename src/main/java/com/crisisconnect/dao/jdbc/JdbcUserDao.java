@@ -39,6 +39,8 @@ public class JdbcUserDao implements UserDao {
         u.setLockUntil(time(rs, "lock_until"));
         u.setLastLoginAt(time(rs, "last_login_at"));
         u.setCreatedAt(time(rs, "created_at"));
+        u.setCity(rs.getString("city"));
+        u.setDesignation(rs.getString("designation"));
         return u;
     }
 
@@ -48,11 +50,11 @@ public class JdbcUserDao implements UserDao {
     public User save(User u) {
         int id = jdbc.insert("""
                 INSERT INTO users(email, name, password_hash, role, status, organization_id, email_verified,
-                                  failed_logins, lock_until, last_login_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                  failed_logins, lock_until, last_login_at, created_at, city, designation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 u.getEmail(), u.getName(), u.getPasswordHash(), u.getRole().name(), u.getStatus().name(),
                 u.getOrganizationId(), u.isEmailVerified() ? 1 : 0, u.getFailedLogins(), str(u.getLockUntil()),
-                str(u.getLastLoginAt()), u.getCreatedAt().toString());
+                str(u.getLastLoginAt()), u.getCreatedAt().toString(), u.getCity(), u.getDesignation());
         u.setId(id);
         return u;
     }
@@ -60,9 +62,10 @@ public class JdbcUserDao implements UserDao {
     @Override
     public boolean update(User u) {
         return jdbc.update("""
-                UPDATE users SET name=?, role=?, status=?, organization_id=?, email_verified=? WHERE id=?""",
+                UPDATE users SET name=?, role=?, status=?, organization_id=?, email_verified=?, city=?, designation=?
+                WHERE id=?""",
                 u.getName(), u.getRole().name(), u.getStatus().name(), u.getOrganizationId(),
-                u.isEmailVerified() ? 1 : 0, u.getId()) == 1;
+                u.isEmailVerified() ? 1 : 0, u.getCity(), u.getDesignation(), u.getId()) == 1;
     }
 
     @Override

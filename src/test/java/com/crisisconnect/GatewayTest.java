@@ -253,4 +253,27 @@ class GatewayTest {
         assertTrue(twilioBodies.get(0).contains("From=whatsapp:+15550001111"), twilioBodies.get(0));
         assertTrue(twilioBodies.get(1).contains("From=whatsapp:+17372508034"), twilioBodies.get(1));
     }
+
+    @Test
+    void whatsappAlertWaitsUntilTheSosIsVerified() throws Exception {
+        twilioBodies.clear();
+        brevoBodies.clear();
+        NotificationService ns = realNotifications();
+        CrisisService crisis = new CrisisService(DaoFactory.organizations(), DaoFactory.resources(), DaoFactory.requests(),
+                DaoFactory.allocations(), new MatchingEngine(180));
+        crisis.addNotifier(ns);
+        EmergencyRequest r = new EmergencyRequest("Roof collapsed", DisasterType.EARTHQUAKE, ResourceType.SHELTER, 10, 30,
+                UrgencyLevel.HIGH, CityDirectory.require("Patiala"));
+        r.setVerification(com.crisisconnect.model.Verification.UNVERIFIED);
+        crisis.createRequest(r);
+        ns.flush();
+        assertTrue(twilioBodies.stream().noneMatch(b -> b.contains(r.getTrackingCode())), "no WhatsApp before verification");
+        assertTrue(brevoBodies.stream().anyMatch(b -> b.contains("awaiting verification") && b.contains(r.getTrackingCode())),
+                "the administrator gets an e-mail that it is waiting");
+
+        crisis.verifyRequest(r.getId(), "officer@punjab.gov.in", "confirmed by phone");
+        ns.flush();
+        assertTrue(twilioBodies.stream().anyMatch(b -> b.contains(r.getTrackingCode()) && b.contains("Verified by officer@punjab.gov.in")),
+                "WhatsApp alert goes out once verified");
+    }
 }

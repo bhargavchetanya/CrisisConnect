@@ -8,6 +8,7 @@ import com.crisisconnect.model.GeoLocation;
 import com.crisisconnect.model.RequestStatus;
 import com.crisisconnect.model.ResourceType;
 import com.crisisconnect.model.UrgencyLevel;
+import com.crisisconnect.model.Verification;
 import com.crisisconnect.util.TrackingCodes;
 
 import java.sql.ResultSet;
@@ -37,6 +38,12 @@ public class JdbcEmergencyRequestDao implements EmergencyRequestDao {
         r.setSource(rs.getString("source"));
         r.setCreatedAt(LocalDateTime.parse(rs.getString("created_at")));
         r.setTrackingCode(rs.getString("tracking_code"));
+        String v = rs.getString("verification");
+        r.setVerification(v == null ? Verification.VERIFIED : Verification.valueOf(v));
+        r.setVerifiedBy(rs.getString("verified_by"));
+        String at = rs.getString("verified_at");
+        r.setVerifiedAt(at == null ? null : LocalDateTime.parse(at));
+        r.setVerificationNote(rs.getString("verification_note"));
         return r;
     }
 
@@ -46,13 +53,14 @@ public class JdbcEmergencyRequestDao implements EmergencyRequestDao {
         int id = jdbc.insert("""
                 INSERT INTO emergency_requests(title, disaster_type, resource_type, quantity_needed, quantity_fulfilled,
                     people_affected, urgency, city, latitude, longitude, status, contact_phone, vulnerable_groups,
-                    source, created_at, tracking_code)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    source, created_at, tracking_code, verification, verified_by, verified_at, verification_note)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 r.getTitle(), r.getDisasterType().name(), r.getResourceType().name(), r.getQuantityNeeded(),
                 r.getQuantityFulfilled(), r.getPeopleAffected(), r.getUrgency().name(), r.getCity(),
                 r.getLocation().getLatitude(), r.getLocation().getLongitude(), r.getStatus().name(),
                 r.getContactPhone(), r.isVulnerableGroups() ? 1 : 0, r.getSource(), r.getCreatedAt().toString(),
-                r.getTrackingCode());
+                r.getTrackingCode(), r.getVerification().name(), r.getVerifiedBy(),
+                r.getVerifiedAt() == null ? null : r.getVerifiedAt().toString(), r.getVerificationNote());
         r.setId(id);
         return r;
     }
@@ -105,6 +113,12 @@ public class JdbcEmergencyRequestDao implements EmergencyRequestDao {
     @Override
     public Optional<EmergencyRequest> findByTrackingCode(String code) {
         return jdbc.queryOne("SELECT * FROM emergency_requests WHERE tracking_code=?", JdbcEmergencyRequestDao::map, code);
+    }
+
+    @Override
+    public boolean updateVerification(int requestId, Verification v, String by, LocalDateTime at, String note) {
+        return jdbc.update("UPDATE emergency_requests SET verification=?, verified_by=?, verified_at=?, verification_note=? WHERE id=?",
+                v.name(), by, at == null ? null : at.toString(), note, requestId) == 1;
     }
 
     @Override

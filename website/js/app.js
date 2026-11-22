@@ -447,8 +447,10 @@
       <div><div class="muted">SOS received — your tracking ID</div>
         <span class="code-big">${escapeHtml(r.trackingCode)}</span>
         <div class="muted small">Priority score ${Number(r.priority).toFixed(1)} · ${escapeHtml(r.city)}</div></div>
-      ${r.smsSent ? `<div class="notice ok">📱 We sent this ID to your phone by SMS (simulated) and will text you as help is dispatched.</div>`
-                  : `<div class="notice warn">No phone number given — note this ID down to follow your request.</div>`}
+      ${r.verification === "UNVERIFIED"
+        ? `<div class="notice warn">🏛️ A government officer of ${escapeHtml(r.city)} will check this SOS${r.smsSent ? " and may call you on the number you gave" : ""}. Help is dispatched as soon as it is verified.</div>`
+        : `<div class="notice ok">✅ Verified — this SOS is in the dispatch queue.</div>`}
+      ${r.smsSent ? "" : `<div class="notice warn">No phone number given — note this ID down to follow your request.</div>`}
       <div class="cta" style="margin:0;justify-content:center">
         <a class="btn btn-red" href="${url}">🔎 Track this SOS</a>
         <button class="btn btn-ghost" type="button" id="copyCode">Copy ID</button>

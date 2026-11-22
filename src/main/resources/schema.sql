@@ -43,7 +43,12 @@ CREATE TABLE IF NOT EXISTS emergency_requests (
     contact_phone      TEXT,
     vulnerable_groups  INTEGER NOT NULL DEFAULT 0,
     source             TEXT    NOT NULL DEFAULT 'DESKTOP',
-    created_at         TEXT    NOT NULL
+    created_at         TEXT    NOT NULL,
+    tracking_code      TEXT,
+    verification       TEXT    NOT NULL DEFAULT 'VERIFIED',
+    verified_by        TEXT,
+    verified_at        TEXT,
+    verification_note  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS allocations (
@@ -75,7 +80,9 @@ CREATE TABLE IF NOT EXISTS users (
     failed_logins   INTEGER NOT NULL DEFAULT 0,
     lock_until      TEXT,
     last_login_at   TEXT,
-    created_at      TEXT    NOT NULL
+    created_at      TEXT    NOT NULL,
+    city            TEXT,
+    designation     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sessions (

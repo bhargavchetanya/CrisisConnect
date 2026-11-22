@@ -150,6 +150,56 @@ public class NotificationService implements CrisisNotifier {
                     r.getTitle(), r.getCity(), r.getTrackingCode(), r.priorityScore(), trackingUrl(r.getTrackingCode())),
                     "SOS_RECEIVED");
         }
+        if (!r.isVerified()) {
+            // public SOS: officers check it first - only an e-mail to the administrator now, WhatsApp after verification
+            adminEmail("SOS awaiting verification " + r.getTrackingCode() + ": " + r.getDisasterType().getLabel() + " in "
+                    + r.getCity() + " (" + r.getUrgency() + ")", sosDetails(r)
+                    + "\nA verification officer of " + r.getCity() + " has been asked to check it: " + publicUrl
+                    + "/admin.html#requests", "SOS_PENDING_VERIFICATION");
+            return;
+        }
+        sosAlerts(r, null);
+    }
+
+    @Override
+    public void requestVerified(EmergencyRequest r) {
+        sosAlerts(r, r.getVerifiedBy());
+    }
+
+    @Override
+    public void requestRejected(EmergencyRequest r) {
+        if (!hasPhone(r.getContactPhone())) return;
+        reporterUpdate(r, "CrisisConnect " + r.getTrackingCode() + ": your SOS could not be verified by the local officer and was"
+                + " closed. If you need help, raise a new SOS with correct details or call 112.", "SOS_REJECTED");
+    }
+
+    /** E-mails the verification officers of the SOS's city (no WhatsApp - keeps the trial quota for real alerts). */
+    public void askOfficersToVerify(EmergencyRequest r, List<com.crisisconnect.model.User> officers) {
+        for (com.crisisconnect.model.User o : officers) {
+            String text = "Hi " + firstName(o.getName()) + ",\nA new SOS needs your verification before relief can be dispatched.\n\n"
+                    + sosDetails(r) + "\nPlease call the reporter, then verify or reject it here: " + publicUrl + "/admin.html#requests";
+            emailMessage(o.getEmail(), o.getName(), "Please verify SOS " + r.getTrackingCode() + " in " + r.getCity(),
+                    text, text, "VERIFY_REQUEST");
+        }
+    }
+
+    private String sosDetails(EmergencyRequest r) {
+        return String.format("""
+                SOS %s - %s
+                Disaster: %s
+                City: %s
+                Need: %d %s (%s)
+                People affected: %,d%s
+                Reporter phone: %s
+                Details: %s
+                """, r.getTrackingCode(), r.getUrgency(), r.getDisasterType().getLabel(), r.getCity(),
+                r.getQuantityNeeded(), r.getResourceType().getUnit(), r.getResourceType().getLabel(),
+                r.getPeopleAffected(), r.isVulnerableGroups() ? " (children/elderly present)" : "",
+                hasPhone(r.getContactPhone()) ? r.getContactPhone() : "not given", r.getTitle());
+    }
+
+    /** The real alerts for a genuine SOS: WhatsApp to the alert team + administrator, area SMS, e-mail, nearby orgs. */
+    private void sosAlerts(EmergencyRequest r, String verifiedBy) {
         // 2) every alert number + the administrator: disaster, city, need and contact
         String alert = String.format("""
                 🚨 *New SOS %s* — %s
@@ -165,7 +215,8 @@ public class NotificationService implements CrisisNotifier {
                 r.getResourceType().getUnit(), r.getResourceType().getLabel(), r.getPeopleAffected(),
                 r.isVulnerableGroups() ? " · children/elderly present" : "", r.priorityScore(),
                 hasPhone(r.getContactPhone()) ? r.getContactPhone() : "no phone given",
-                r.getTitle() + " — " + trackingUrl(r.getTrackingCode()), publicUrl);
+                r.getTitle() + " — " + trackingUrl(r.getTrackingCode()), publicUrl)
+                + (verifiedBy == null ? "" : "\n✅ Verified by " + verifiedBy);
         Set<String> recipients = new LinkedHashSet<>(alertNumbers);
         if (adminPhone != null) recipients.add(adminPhone);
         for (String phone : recipients) {

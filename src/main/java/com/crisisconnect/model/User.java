@@ -18,6 +18,8 @@ public class User extends BaseEntity {
     private int failedLogins;
     private LocalDateTime lockUntil;
     private LocalDateTime lastLoginAt;
+    private String city;                       // verification officers: the city they verify SOS requests for
+    private String designation;                // verification officers: e.g. "Tehsildar, Patiala"
 
     public User() { }
 
@@ -58,4 +60,9 @@ public class User extends BaseEntity {
     public void setLockUntil(LocalDateTime lockUntil) { this.lockUntil = lockUntil; }
     public LocalDateTime getLastLoginAt() { return lastLoginAt; }
     public void setLastLoginAt(LocalDateTime lastLoginAt) { this.lastLoginAt = lastLoginAt; }
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
+    public String getDesignation() { return designation; }
+    public void setDesignation(String designation) { this.designation = designation; }
+    public boolean isOfficer() { return role == Role.OFFICER; }
 }

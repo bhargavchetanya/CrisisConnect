@@ -102,6 +102,7 @@ public final class Json {
         m.put("status", r.getStatus().name());
         m.put("vulnerable", r.isVulnerableGroups());
         m.put("source", r.getSource());
+        m.put("verification", r.getVerification().name());
         m.put("createdAt", r.getCreatedAt().toString());
         return m;
     }
@@ -189,6 +190,10 @@ public final class Json {
         m.put("trackingCode", r.getTrackingCode());
         m.put("phone", r.getContactPhone());
         m.put("remaining", r.remainingQuantity());
+        m.put("verificationLabel", r.getVerification().getLabel());
+        m.put("verifiedBy", r.getVerifiedBy());
+        m.put("verifiedAt", r.getVerifiedAt() == null ? null : r.getVerifiedAt().toString());
+        m.put("verificationNote", r.getVerificationNote());
         return m;
     }
 
@@ -203,6 +208,8 @@ public final class Json {
         m.put("organizationId", u.getOrganizationId());
         m.put("organization", u.getOrganizationName());
         m.put("emailVerified", u.isEmailVerified());
+        m.put("city", u.getCity());
+        m.put("designation", u.getDesignation());
         m.put("lastLoginAt", u.getLastLoginAt() == null ? null : u.getLastLoginAt().toString());
         m.put("createdAt", u.getCreatedAt().toString());
         return m;

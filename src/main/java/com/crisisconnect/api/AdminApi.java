@@ -1,5 +1,6 @@
 package com.crisisconnect.api;
 
+import com.crisisconnect.exception.AuthException;
 import com.crisisconnect.exception.EntityNotFoundException;
 import com.crisisconnect.exception.ValidationException;
 import com.crisisconnect.model.EmergencyRequest;
@@ -13,6 +14,7 @@ import com.crisisconnect.model.Role;
 import com.crisisconnect.model.UrgencyLevel;
 import com.crisisconnect.model.User;
 import com.crisisconnect.model.UserStatus;
+import com.crisisconnect.model.Verification;
 import com.crisisconnect.service.AuditService;
 import com.crisisconnect.service.AuthService;
 import com.crisisconnect.service.CrisisService;
@@ -47,25 +49,48 @@ final class AdminApi {
     void register(Router api) {
         // ------------------------------------------------ overview
         api.secure("GET", "/api/admin/overview", c -> {
-            User u = c.require(Role.ORGANIZATION);
+            User u = c.require(Role.OFFICER);
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("user", AuthApi.session(u));
             m.put("stats", Json.of(crisis.stats()));
-            m.put("pendingUsers", u.isAdmin() ? auth.pendingCount() : 0);
+            m.put("pendingUsers", u.isAdmin() ? auth.pendingCount()
+                    : u.getRole() == Role.COORDINATOR ? (int) auth.listOfficers().stream()
+                            .filter(x -> x.getStatus() == UserStatus.PENDING).count() : 0);
+            m.put("toVerify", crisis.requests().stream()
+                    .filter(r -> r.getVerification() == Verification.UNVERIFIED && r.getStatus().isActive())
+                    .filter(r -> u.getRole() != Role.OFFICER || r.getCity().equalsIgnoreCase(u.getCity()))
+                    .count());
             m.put("messages", notifications.count());
             m.put("emailMode", notifications.emailEnabled() ? "real (Brevo)" : "simulated");
             m.put("whatsappMode", notifications.whatsappEnabled()
                     ? "real (Twilio) to " + notifications.realWhatsAppNumbers().size() + " number(s)" : "simulated");
             m.put("smsMode", notifications.smsEnabled()
                     ? "real (CircuitDigest) to " + notifications.smsNumbers().size() + " area number(s)" : "simulated");
-            m.put("recentMessages", u.getRole() == Role.ORGANIZATION ? List.of() : Json.list(notifications.outbox(null, 6), Json::of));
+            m.put("recentMessages", !u.getRole().atLeast(Role.COORDINATOR) ? List.of() : Json.list(notifications.outbox(null, 6), Json::of));
             return m;
         });
 
         // ------------------------------------------------ requests
         api.secure("GET", "/api/admin/requests", c -> {
-            c.require(Role.ORGANIZATION);                      // organizations can see what is needed (read-only)
-            return Json.list(crisis.requests(), Json::admin);
+            User u = c.require(Role.OFFICER);                  // organizations can see what is needed (read-only)
+            List<EmergencyRequest> list = crisis.requests();
+            if (u.getRole() == Role.OFFICER) {                 // officers: their own city only
+                list = list.stream().filter(r -> r.getCity().equalsIgnoreCase(u.getCity())).toList();
+            }
+            return Json.list(list, Json::admin);
+        }).secure("POST", "/api/admin/requests/{id}/verify", c -> {
+            User u = c.require(Role.OFFICER);
+            EmergencyRequest r = requireVerifier(u, c.pathInt("id"));
+            r = crisis.verifyRequest(r.getId(), u.getEmail(), c.field("note"));
+            audit.log(u.getEmail(), "SOS_VERIFIED", r.getTrackingCode() + " - " + r.getTitle() + " (" + r.getCity() + ")", c.ip());
+            return Json.admin(r);
+        }).secure("POST", "/api/admin/requests/{id}/reject", c -> {
+            User u = c.require(Role.OFFICER);
+            EmergencyRequest r = requireVerifier(u, c.pathInt("id"));
+            r = crisis.rejectRequest(r.getId(), u.getEmail(), c.field("reason"));
+            audit.log(u.getEmail(), "SOS_REJECTED", r.getTrackingCode() + " - " + r.getTitle() + " (" + r.getCity() + "): "
+                    + r.getVerificationNote(), c.ip());
+            return Json.admin(r);
         }).secure("POST", "/api/admin/requests/{id}/cancel", c -> {
             User u = c.require(Role.COORDINATOR);
             int id = c.pathInt("id");
@@ -163,13 +188,13 @@ final class AdminApi {
 
         // ------------------------------------------------ users (ADMIN)
         api.secure("GET", "/api/admin/users", c -> {
-            c.require(Role.ADMIN);
-            return Json.list(auth.listUsers(), Json::of);
+            User u = c.require(Role.COORDINATOR);              // coordinators see (and approve) verification officers only
+            return Json.list(u.isAdmin() ? auth.listUsers() : auth.listOfficers(), Json::of);
         }).secure("POST", "/api/admin/users/{id}/approve", c -> {
-            User admin = c.require(Role.ADMIN);
+            User admin = c.require(Role.COORDINATOR);
             return Json.of(auth.approve(admin, c.pathInt("id"), c.ip()));
         }).secure("POST", "/api/admin/users/{id}/status", c -> {
-            User admin = c.require(Role.ADMIN);
+            User admin = c.require(Role.COORDINATOR);
             return Json.of(auth.setStatus(admin, c.pathInt("id"), UserStatus.valueOf(c.field("status")), c.ip()));
         }).secure("POST", "/api/admin/users/{id}/role", c -> {
             User admin = c.require(Role.ADMIN);
@@ -178,7 +203,7 @@ final class AdminApi {
             User admin = c.require(Role.ADMIN);
             return Json.of(auth.setOrganization(admin, c.pathInt("id"), c.optionalInt("organizationId"), c.ip()));
         }).secure("DELETE", "/api/admin/users/{id}", c -> {
-            User admin = c.require(Role.ADMIN);
+            User admin = c.require(Role.COORDINATOR);
             auth.deleteUser(admin, c.pathInt("id"), c.ip());
             return Map.of("ok", true);
         });
@@ -188,6 +213,16 @@ final class AdminApi {
             c.require(Role.ADMIN);
             return Json.list(audit.recent(Validator.parseIntOr(c.query("limit"), 150)), Json::of);
         });
+    }
+
+    /** Officers may verify only open SOS requests of their own city; coordinators and administrators any. */
+    private EmergencyRequest requireVerifier(User u, int id) throws EntityNotFoundException, AuthException {
+        EmergencyRequest r = crisis.request(id).orElseThrow(() -> new EntityNotFoundException("Request", id));
+        if (u.getRole() == Role.OFFICER && !r.getCity().equalsIgnoreCase(u.getCity() == null ? "" : u.getCity())) {
+            throw AuthException.forbidden("You verify SOS requests for " + u.getCity() + " only.");
+        }
+        if (u.getRole() == Role.ORGANIZATION) throw AuthException.forbidden("Organizations cannot verify SOS requests.");
+        return r;
     }
 
     private Resource resource(int id) throws EntityNotFoundException {

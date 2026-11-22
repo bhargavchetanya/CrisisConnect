@@ -7,17 +7,20 @@
   const LABEL = { FOOD: "Food & Water", MEDICAL: "Medical Supplies", SHELTER: "Shelter Beds", VEHICLE: "Rescue Vehicles", VOLUNTEER: "Volunteers" };
   const TITLES = {
     overview: ["Overview", "Live numbers, Smart Match and the latest alerts"],
-    requests: ["Emergency requests", "Re-prioritise or close SOS requests"],
+    requests: ["Emergency requests", "Verify, re-prioritise or close SOS requests"],
     resources: ["Resources", "Stock registered by partner organizations"],
     organizations: ["Organizations", "NGOs, hospitals, government bodies and volunteer groups"],
     outbox: ["WhatsApp & e-mail outbox", "Every alert the system has sent"],
-    users: ["Users", "Approve organizations and coordinators, assign roles"],
+    users: ["Users", "Approve accounts - coordinators approve verification officers"],
     audit: ["Audit log", "Who did what, and when"],
     account: ["My account", "Profile and password"]
   };
   let me = null, meta = null, orgs = [], timer = null;
   let reqFilter = "active", channel = "ALL";
-  const ROLE_LABEL = { ORGANIZATION: "Organization", COORDINATOR: "Coordinator", ADMIN: "Administrator" };
+  const ROLE_LABEL = { OFFICER: "Verification officer", ORGANIZATION: "Organization", COORDINATOR: "Coordinator", ADMIN: "Administrator" };
+  const VER_LABEL = { UNVERIFIED: "Waiting for verification", VERIFIED: "Verified", REJECTED: "Rejected" };
+  const isStaff = () => me.role === "COORDINATOR" || me.role === "ADMIN";
+  const canVerify = () => me.role === "OFFICER" || isStaff();
 
   // ------------------------------------------------------------------ boot
   async function boot() {
@@ -25,13 +28,22 @@
     if (!me) { location.replace("/login.html?next=" + encodeURIComponent("/admin.html" + location.hash)); return; }
     $("#app").hidden = false;
     $("#meName").textContent = me.name;
-    $("#meOrg").textContent = me.organization || (me.role === "ORGANIZATION" ? "No organization linked yet" : "All organizations");
+    $("#meOrg").textContent = me.role === "OFFICER" ? `${me.designation || "Officer"} · ${me.city || ""}`
+      : me.organization || (me.role === "ORGANIZATION" ? "No organization linked yet" : "All organizations");
     $("#avatar").textContent = me.name.charAt(0).toUpperCase();
     $("#rolePill").textContent = me.roleLabel;
     $("#rolePill").classList.add(me.role);
-    if (me.role !== "ADMIN") document.querySelectorAll(".admin-only").forEach(e => e.remove());
-    if (me.role === "ORGANIZATION") document.querySelectorAll(".staff-only").forEach(e => e.remove());
-    else document.querySelectorAll(".org-only").forEach(e => e.remove());
+    const drop = sel => document.querySelectorAll(sel).forEach(e => e.remove());
+    if (me.role !== "ADMIN") drop(".admin-only");
+    if (!isStaff()) drop(".manager-only, .staff-only");
+    if (me.role !== "ORGANIZATION") drop(".org-only");
+    if (me.role !== "OFFICER") drop(".officer-only");
+    if (me.role === "OFFICER") {
+      drop(".no-officer");
+      reqFilter = "verify";
+      document.querySelectorAll("#reqFilter button").forEach(x => x.classList.toggle("on", x.dataset.f === "verify"));
+      $("#officerCityNote").textContent = `You verify SOS requests for ${me.city}`;
+    }
     meta = await api("/api/meta");
     fillSelect($("#resType"), meta.resourceTypes.map(t => [t, LABEL[t] || t]));
     fillSelect($("#resCity"), [["", "Select city"], ...meta.cities.map(c => [c, c])]);
@@ -48,8 +60,9 @@
 
   function route() {
     let tab = (location.hash || "#overview").slice(1);
-    if (!TITLES[tab] || (["users", "audit"].includes(tab) && me.role !== "ADMIN")
-        || (["organizations", "outbox"].includes(tab) && me.role === "ORGANIZATION")) tab = "overview";
+    if (!TITLES[tab] || (tab === "audit" && me.role !== "ADMIN") || (tab === "users" && !isStaff())
+        || (["organizations", "outbox"].includes(tab) && !isStaff())
+        || (tab === "resources" && me.role === "OFFICER")) tab = "overview";
     document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "v-" + tab));
     document.querySelectorAll(".side a.tab").forEach(a => a.classList.toggle("on", a.dataset.tab === tab));
     $("#viewTitle").textContent = TITLES[tab][0];
@@ -82,6 +95,7 @@
       $("#oDispatched").textContent = fmt(s.unitsDispatched);
       $("#oMessages").textContent = fmt(o.messages);
       setPending(o.pendingUsers);
+      setToVerify(o.toVerify);
       if ($("#recentMsgs")) $("#recentMsgs").innerHTML = o.recentMessages.length
         ? o.recentMessages.map(msgCard).join("")
         : `<div class="empty">No messages yet — raise an SOS or run Smart Match.</div>`;
@@ -93,6 +107,15 @@
     if (c) { c.textContent = n; c.hidden = !n; }
     $("#pendingBar").hidden = !n;
     $("#pendingText").textContent = `${n} account${n === 1 ? " is" : "s are"} waiting for approval`;
+  }
+
+  function setToVerify(n) {
+    const show = canVerify() && n > 0;
+    $("#verifyBar").hidden = !show;
+    $("#verifyText").textContent = `${n} SOS request${n === 1 ? " is" : "s are"} waiting for verification`
+      + (me.role === "OFFICER" ? ` in ${me.city}` : " - Smart Match skips them until an officer checks them");
+    const c = $("#verifyCount");
+    if (c) { c.textContent = n; c.hidden = !show; }
   }
 
   async function runMatch() {
@@ -120,13 +143,16 @@
       const list = await api("/api/admin/requests");
       const q = $("#reqSearch").value.trim().toLowerCase();
       const active = r => r.status === "OPEN" || r.status === "PARTIALLY_FULFILLED";
+      const unverified = r => r.verification === "UNVERIFIED" && active(r);
+      if (canVerify()) setToVerify(list.filter(unverified).length);
       const rows = list
-        .filter(r => reqFilter === "all" || (reqFilter === "active" ? active(r) : r.status === reqFilter))
+        .filter(r => reqFilter === "all" || (reqFilter === "verify" ? unverified(r)
+          : reqFilter === "active" ? active(r) : r.status === reqFilter))
         .filter(r => !q || (r.title + " " + r.city + " " + r.trackingCode).toLowerCase().includes(q))
-        .sort((a, b) => (active(b) - active(a)) || b.priority - a.priority);
+        .sort((a, b) => (unverified(b) - unverified(a)) || (active(b) - active(a)) || b.priority - a.priority);
       $("#reqBody").innerHTML = rows.length ? rows.map(r => {
         const pct = r.quantityNeeded ? Math.round(r.quantityFulfilled / r.quantityNeeded * 100) : 0;
-        const staff = me.role !== "ORGANIZATION";
+        const staff = isStaff();
         const urg = active(r) && staff
           ? `<select class="inp sm" data-urg="${r.id}">${["CRITICAL", "HIGH", "MEDIUM", "LOW"].map(u => `<option ${u === r.urgency ? "selected" : ""}>${u}</option>`).join("")}</select>`
           : `<span class="badge b-${r.urgency}">${r.urgency}</span>`;
@@ -136,11 +162,15 @@
           <td>${h(r.city)}</td>
           <td>${urg}</td>
           <td><div class="progress"><i style="width:${pct}%"></i></div><div class="sub">${fmt(r.quantityFulfilled)} / ${fmt(r.quantityNeeded)} ${h(r.unit)}</div></td>
-          <td class="mono small">${h(r.phone || "—")}</td>
+          <td class="mono small">${r.phone ? `<a href="tel:${h(r.phone)}" style="color:inherit">${h(r.phone)}</a>` : "—"}</td>
+          <td><span class="pill ${r.verification}">${VER_LABEL[r.verification] || r.verification}</span>${r.verifiedBy
+            ? `<div class="sub" title="${h(r.verificationNote || "")}">by ${h(r.verifiedBy)}${r.verificationNote ? " · " + h(r.verificationNote) : ""}</div>` : ""}</td>
           <td><span class="pill ${r.status}">${r.status.replace("_", " ")}</span></td>
-          <td>${active(r) && staff ? `<button class="btn btn-danger btn-xs" data-cancel="${r.id}" data-title="${h(r.title)}">Close</button>` : ""}</td>
+          <td><div class="actions">${unverified(r) && canVerify() ? `<button class="btn btn-green btn-xs" data-verify="${r.id}" data-title="${h(r.title)}">✓ Verify</button>
+              <button class="btn btn-danger btn-xs" data-reject="${r.id}" data-title="${h(r.title)}">✗ Reject</button>` : ""}
+            ${active(r) && staff && !unverified(r) ? `<button class="btn btn-danger btn-xs" data-cancel="${r.id}" data-title="${h(r.title)}">Close</button>` : ""}</div></td>
         </tr>`;
-      }).join("") : `<tr><td colspan="8" class="empty">No requests match this filter</td></tr>`;
+      }).join("") : `<tr><td colspan="9" class="empty">${reqFilter === "verify" ? "Nothing to verify right now 🎉" : "No requests match this filter"}</td></tr>`;
     } catch (e) { handleError(e); }
   }
 
@@ -218,7 +248,7 @@
       setPending(pending.length);
       $("#pendingPanel").hidden = !pending.length;
       $("#pendingList").innerHTML = pending.map(u => `<div class="toolbar" style="padding:10px 0;border-bottom:1px solid #182040;margin:0">
-          <div><b>${h(u.name)}</b> <span class="muted">${h(u.email)}</span><div class="sub muted small">${h(u.organization || "No organization")} · signed up ${ago(u.createdAt)}</div></div>
+          <div><b>${h(u.name)}</b> <span class="muted">${h(u.email)}</span><div class="sub muted small">${h(ROLE_LABEL[u.role])} · ${h(u.role === "OFFICER" ? (u.designation || "") + ", " + (u.city || "") : u.organization || "No organization")} · signed up ${ago(u.createdAt)}</div></div>
           <div class="actions" style="margin-left:auto"><button class="btn btn-green btn-xs" data-approve="${u.id}">✓ Approve</button>
           <button class="btn btn-danger btn-xs" data-deluser="${u.id}" data-title="${h(u.email)}">Reject</button></div></div>`).join("");
       const orgOpts = sel => `<option value="">All organizations</option>` + orgs.map(x => `<option value="${x.id}" ${x.id === sel ? "selected" : ""}>${h(x.name)}</option>`).join("");
@@ -226,8 +256,11 @@
         const self = u.id === me.id;
         return `<tr>
           <td><b>${h(u.name)}</b>${self ? ' <span class="muted small">(you)</span>' : ""}<div class="sub">${h(u.email)}${u.emailVerified ? "" : " · e-mail not verified"}</div></td>
-          <td><select class="inp sm" data-role="${u.id}" ${self ? "disabled" : ""}>${["ORGANIZATION", "COORDINATOR", "ADMIN"].map(r => `<option value="${r}" ${r === u.role ? "selected" : ""}>${ROLE_LABEL[r]}</option>`).join("")}</select></td>
-          <td><select class="inp sm" data-org="${u.id}" style="max-width:210px">${orgOpts(u.organizationId)}</select></td>
+          <td>${me.role === "ADMIN" && u.role !== "OFFICER"
+            ? `<select class="inp sm" data-role="${u.id}" ${self ? "disabled" : ""}>${["ORGANIZATION", "COORDINATOR", "ADMIN"].map(r => `<option value="${r}" ${r === u.role ? "selected" : ""}>${ROLE_LABEL[r]}</option>`).join("")}</select>`
+            : `<span class="role-pill ${u.role}">${h(ROLE_LABEL[u.role])}</span>`}</td>
+          <td>${u.role === "OFFICER" ? `<span class="small">${h(u.city || "")}</span><div class="sub">${h(u.designation || "")}</div>`
+            : me.role === "ADMIN" ? `<select class="inp sm" data-org="${u.id}" style="max-width:210px">${orgOpts(u.organizationId)}</select>` : "—"}</td>
           <td><span class="pill ${u.status}">${u.status}</span></td>
           <td class="small">${u.lastLoginAt ? ago(u.lastLoginAt) : "never"}</td>
           <td><div class="actions">${self ? "" : u.status === "ACTIVE"
@@ -255,7 +288,9 @@
   // ------------------------------------------------------------------ account
   function loadAccount() {
     $("#profile").innerHTML = `<span>Name</span><b>${h(me.name)}</b><span>E-mail</span><b>${h(me.email)}</b>
-      <span>Role</span><b>${h(me.roleLabel)}</b><span>Organization</span><b>${h(me.organization || "All organizations")}</b>
+      <span>Role</span><b>${h(me.roleLabel)}</b>${me.role === "OFFICER"
+        ? `<span>Verifies SOS in</span><b>${h(me.city || "")}</b><span>Designation</span><b>${h(me.designation || "")}</b>`
+        : `<span>Organization</span><b>${h(me.organization || "All organizations")}</b>`}
       <span>Member since</span><b>${when(me.createdAt)}</b>`;
   }
 
@@ -315,7 +350,18 @@
       const b = e.target.closest("button"); if (!b || !b.dataset) return;
       const d = b.dataset;
       try {
-        if (d.cancel) {
+        if (d.verify) {
+          const note = prompt(`Verify "${d.title}"?\nOptional note (e.g. "called reporter, confirmed"):`, "");
+          if (note === null) return;
+          await api(`/api/admin/requests/${d.verify}/verify`, { method: "POST", data: { note } });
+          toast("SOS verified", `${d.title} - Smart Match can now dispatch to it`); loadRequests();
+        } else if (d.reject) {
+          const reason = prompt(`Reject "${d.title}" as not genuine?\nReason (required):`, "");
+          if (reason === null) return;
+          if (!reason.trim()) { toast("Reason needed", "Please write why the SOS is rejected", "warn"); return; }
+          await api(`/api/admin/requests/${d.reject}/reject`, { method: "POST", data: { reason } });
+          toast("SOS rejected", d.title, "warn"); loadRequests();
+        } else if (d.cancel) {
           if (!confirm(`Close "${d.title}"? The reporter is notified.`)) return;
           await api(`/api/admin/requests/${d.cancel}/cancel`, { method: "POST" });
           toast("Request closed", d.title); loadRequests();

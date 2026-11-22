@@ -151,6 +151,8 @@
 .timeline li.dispatched::before { border-color: var(--orange); }
 .timeline li.fulfilled::before { border-color: var(--green); background: var(--green); }
 .timeline li.closed::before { border-color: var(--muted); }
+.timeline li.pending::before { border-color: #f5c518; }
+.timeline li.verified::before { border-color: var(--green); }
 .timeline b { display: block; }
 .timeline span { color: var(--muted); font-size: .88rem; }
 .timeline time { color: #6d789b; font-size: .76rem; }
@@ -173,3 +175,10 @@
 .new-org { display: grid; gap: 12px; padding: 14px; border: 1px dashed rgba(46,213,195,.35); border-radius: 12px; background: rgba(46,213,195,.05); }
 .new-org[hidden] { display: none !important; }
 .new-org .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* SOS verification */
+.role-pill.OFFICER { background: rgba(245,197,24,.14); color: #ffe07a; border-color: rgba(245,197,24,.4); }
+.pill.UNVERIFIED { background: rgba(245,197,24,.15); color: #ffe07a; }
+.pill.VERIFIED { background: rgba(46,213,123,.15); color: #8ff0b8; }
+.pill.REJECTED { background: rgba(255,71,87,.15); color: #ff9aa3; }
+.verify-bar { border-color: rgba(245,197,24,.45); background: rgba(245,197,24,.08); }
