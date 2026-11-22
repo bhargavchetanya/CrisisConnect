@@ -53,11 +53,13 @@
         <div class="panel"><div class="panel-head"><h3>Timeline</h3><span class="muted small">updates every 10 s</span></div>
           <ul class="timeline">${t.timeline.map(s => `<li class="${s.kind}"><b>${h(s.title)}</b><span>${h(s.text)}</span><br><time>${when(s.time)}</time></li>`).join("")}</ul>
         </div>
-        <div class="panel"><div class="panel-head"><h3>SMS sent to you</h3><span class="muted small mono">${h(t.phone || "no phone given")}</span></div>
-          <div class="stack" style="gap:10px">${t.messages.length ? t.messages.map(m => `<div class="msg SMS">
-              <div class="head"><span class="ch">✉️ SMS</span><span class="mono">${h(m.to)}</span></div>
-              <div class="bubble">${h(m.message)}</div><div class="foot"><span class="event">${h(m.event)}</span><span>${ago(m.createdAt)}</span></div></div>`).join("")
-            : `<div class="empty">No phone number was given with this SOS, so no SMS updates are sent.</div>`}</div>
+        <div class="panel"><div class="panel-head"><h3>Help on the way</h3><span class="muted small mono">reporter ${h(t.phone || "-")}</span></div>
+          <div class="stack" style="gap:10px">${t.dispatches.length ? t.dispatches.map(d => `<div class="msg WHATSAPP">
+              <div class="head"><span class="ch">🚚 ${fmt(d.quantity)} ${h(t.unit)}</span><b>${h(d.resource)}</b></div>
+              <div class="bubble">From ${h(d.organization)} · ${d.distanceKm < 1 ? "same city" : Number(d.distanceKm).toFixed(1) + " km"} · ETA ~${d.etaMinutes} min</div>
+              <div class="foot"><span class="event">DISPATCHED</span><span>${ago(d.createdAt)}</span></div></div>`).join("")
+            : `<div class="empty">${t.verification === "UNVERIFIED" ? "Nothing is dispatched until a local officer verifies this SOS."
+                : t.status === "CANCELLED" ? "This SOS is closed." : "Waiting for the next Smart Match run."}</div>`}</div>
         </div>
       </div>
     </div>`;
