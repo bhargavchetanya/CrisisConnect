@@ -242,11 +242,22 @@ public class NotificationService implements CrisisNotifier {
         adminAlert("Smart Match: " + report.headline(), text, "MATCH_SUMMARY");
     }
 
+    /** An organization offered (or restocked) supplies - the administrator decides whether to dispatch them. */
+    public void resourceOffered(com.crisisconnect.model.User by, com.crisisconnect.model.Resource r, int qty, boolean restock) {
+        String org = r.getOrganizationName() == null ? blank(by.getOrganizationName()) : r.getOrganizationName();
+        String text = String.format("📦 *%s %s*\n%s %s of %s in %s\nBy: %s (%s)\nRun Smart Match to dispatch: %s/admin.html#overview",
+                org, restock ? "restocked supplies" : "offered new supplies", (restock ? "+" : "") + qty, r.getUnit(), r.getName(),
+                blank(r.getCity()), by.getName(), by.getEmail(), publicUrl);
+        // organization activity: e-mail only (keeps the small WhatsApp trial quota for SOS alerts)
+        adminEmail((restock ? "Restock: " : "New supplies: ") + org + " - " + qty + " " + r.getUnit() + " of " + r.getName(),
+                text.replace("*", ""), "RESOURCE_OFFERED");
+    }
+
     @Override
     public void organizationRegistered(Organization o) {
         String text = String.format("🏥 *New organization joined*\n%s (%s) - %s\nPhone: %s · E-mail: %s\nReview: %s/admin.html#organizations",
                 o.getName(), o.getType(), o.getCity(), blank(o.getContactPhone()), blank(o.getEmail()), publicUrl);
-        adminAlert("New organization: " + o.getName() + " (" + o.getCity() + ")", text, "ORG_REGISTERED");
+        adminEmail("New organization: " + o.getName() + " (" + o.getCity() + ")", text.replace("*", ""), "ORG_REGISTERED");
     }
 
     @Override
@@ -274,10 +285,10 @@ public class NotificationService implements CrisisNotifier {
 
     /** A coordinator / organization asked to join: tell the administrator on WhatsApp and by e-mail. */
     public void newSignupForAdmins(String applicant, String applicantEmail, String org, String via) {
-        String text = "👤 *New coordinator request*\n" + applicant + " (" + applicantEmail + ")"
+        String text = "👤 *New account request*\n" + applicant + " (" + applicantEmail + ")"
                 + (org == null ? "" : "\nOrganization: " + org) + "\nSigned up with: " + via
                 + "\nWaiting for your approval: " + publicUrl + "/admin.html#users";
-        adminAlert("New coordinator waiting for approval: " + applicant, text, "NEW_SIGNUP");
+        adminEmail("New account waiting for approval: " + applicant, text.replace("*", ""), "NEW_SIGNUP");
     }
 
     /** Admin button "Send test": proves WhatsApp and e-mail are configured correctly. */

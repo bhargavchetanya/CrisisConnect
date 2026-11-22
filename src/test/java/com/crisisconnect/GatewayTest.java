@@ -174,8 +174,8 @@ class GatewayTest {
         AuthException pending = assertThrows(AuthException.class, () -> auth.loginWithGoogle(p, "ip", "ua"));
         assertEquals("PENDING_APPROVAL", pending.getCode());
         ns.flush();
-        assertTrue(twilioBodies.stream().anyMatch(b -> b.contains("+919000000001") && b.contains("New coordinator request")
-                && b.contains("relief.lead@example.org")), "admin WhatsApp for the join request");
+        assertTrue(twilioBodies.stream().noneMatch(b -> b.contains("relief.lead@example.org")), "join requests are e-mail only");
+        assertTrue(brevoBodies.stream().anyMatch(b -> b.contains("relief.lead@example.org")), "admin e-mail for the join request");
 
         var admin = auth.login("admin@example.org", "AdminPass#2026", "ip", "ua").user();
         var lead = DaoFactory.users().findByEmail("relief.lead@example.org").orElseThrow();
