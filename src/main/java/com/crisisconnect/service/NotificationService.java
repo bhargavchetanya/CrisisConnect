@@ -5,6 +5,7 @@ import com.crisisconnect.dao.OrganizationDao;
 import com.crisisconnect.model.EmergencyRequest;
 import com.crisisconnect.model.Notification;
 import com.crisisconnect.model.NotificationChannel;
+import com.crisisconnect.model.DisasterType;
 import com.crisisconnect.model.Organization;
 import com.crisisconnect.model.RequestStatus;
 import com.crisisconnect.model.UrgencyLevel;
@@ -16,6 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -32,8 +34,10 @@ import java.util.logging.Logger;
  *       (WHATSAPP_ALERT_NUMBERS, ADMIN_WHATSAPP) once TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN are set; messages to other
  *       numbers (e.g. demo organizations) are simulated so nobody unknown is contacted.</li>
  *   <li><b>E-mail is real</b> through Brevo when BREVO_API_KEY / EMAIL_FROM are set.</li>
- *   <li><b>SMS is simulated</b> (Indian SMS needs DLT registration); a reporter whose phone is an alert number also
- *       gets the same update on WhatsApp.</li>
+ *   <li><b>Area SMS is real</b> when CIRCUITDIGEST_API_KEY and SMS_ALERT_NUMBERS are set: the people in the affected
+ *       area get "The Flood alert is currently active in Patiala. Please ensure safety." for every SOS and
+ *       "The relief team is currently on the way to Patiala." when Smart Match dispatches (free CircuitDigest Cloud
+ *       templates). Other SMS (reporter updates) stay simulated - Indian free-text SMS needs DLT registration.</li>
  * </ul>
  * Real deliveries run on a background thread, so a slow gateway never delays an SOS or a dispatch.
  *
@@ -64,6 +68,9 @@ public class NotificationService implements CrisisNotifier {
     private final String adminPhone;              // E.164 or null, receives everything for the administrator
     private final List<String> adminEmails;
     private final boolean whatsappToAnyNumber;    // true only with an approved (non-sandbox) WhatsApp sender
+    private final SmsGateway sms;
+    private final List<String> smsNumbers;        // E.164, people in the affected area who get real SMS alerts
+    private final Map<String, Long> lastDispatchSms = new ConcurrentHashMap<>();   // city -> time, saves the SMS quota
     private final ExecutorService outbox = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "notification-outbox");
         t.setDaemon(true);
@@ -80,6 +87,15 @@ public class NotificationService implements CrisisNotifier {
     public NotificationService(NotificationDao dao, OrganizationDao orgDao, EmailSender email, WhatsAppGateway whatsapp,
                                String publicUrl, double criticalRadiusKm, List<String> alertNumbers, String adminPhone,
                                List<String> adminEmails, boolean whatsappToAnyNumber) {
+        this(dao, orgDao, email, whatsapp, publicUrl, criticalRadiusKm, alertNumbers, adminPhone, adminEmails,
+                whatsappToAnyNumber, new SmsGateway("", "", ""), List.of());
+    }
+
+    public NotificationService(NotificationDao dao, OrganizationDao orgDao, EmailSender email, WhatsAppGateway whatsapp,
+                               String publicUrl, double criticalRadiusKm, List<String> alertNumbers, String adminPhone,
+                               List<String> adminEmails, boolean whatsappToAnyNumber, SmsGateway sms, List<String> smsNumbers) {
+        this.sms = sms;
+        this.smsNumbers = List.copyOf(smsNumbers);
         this.dao = dao;
         this.orgDao = orgDao;
         this.email = email;
@@ -99,6 +115,10 @@ public class NotificationService implements CrisisNotifier {
     public boolean emailEnabled() { return email.isConfigured(); }
 
     public boolean whatsappEnabled() { return whatsapp.isConfigured(); }
+
+    public boolean smsEnabled() { return sms.isConfigured() && !smsNumbers.isEmpty(); }
+
+    public List<String> smsNumbers() { return smsNumbers; }
 
     /** Numbers that get real WhatsApp messages (alert list + administrator). */
     public List<String> realWhatsAppNumbers() {
@@ -146,6 +166,8 @@ public class NotificationService implements CrisisNotifier {
         for (String phone : recipients) {
             whatsapp(phone, phone.equals(adminPhone) ? "Administrator" : "Alert team", alert, "SOS_ALERT", r.getId());
         }
+        // people in the affected area: real SMS "The Flood alert is currently active in Patiala. Please ensure safety."
+        areaSms(disasterWord(r.getDisasterType()) + " alert", "active in " + r.getCity(), "SOS_AREA_ALERT", r.getId());
         adminEmail("New SOS " + r.getTrackingCode() + ": " + r.getDisasterType().getLabel() + " in " + r.getCity()
                 + " (" + r.getUrgency() + ")", alert.replace("*", ""), "SOS_ALERT");
         // 3) CRITICAL: organizations nearby are asked to mobilise
@@ -168,6 +190,14 @@ public class NotificationService implements CrisisNotifier {
     @Override
     public void resourcesDispatched(EmergencyRequest r, List<AllocationPlan> dispatches) {
         if (dispatches.isEmpty()) return;
+        // people in the area: "The relief team is currently on the way to Patiala." (once per city per 30 min)
+        String cityKey = r.getCity() == null ? "" : r.getCity().trim().toLowerCase();
+        long now = System.currentTimeMillis();
+        Long last = lastDispatchSms.get(cityKey);
+        if (last == null || now - last > 30 * 60_000L) {
+            lastDispatchSms.put(cityKey, now);
+            areaSms("relief team", "on the way to " + r.getCity(), "RELIEF_AREA_ALERT", r.getId());
+        }
         for (AllocationPlan p : dispatches) {
             orgDao.findById(p.resource().getOrganizationId()).ifPresent(o -> {
                 if (!hasPhone(o.getContactPhone())) return;
@@ -253,6 +283,7 @@ public class NotificationService implements CrisisNotifier {
         for (String phone : realWhatsAppNumbers()) {
             sent.add(whatsapp(phone, phone.equals(adminPhone) ? "Administrator" : "Alert team", text, "TEST", null));
         }
+        sent.addAll(areaSms("CrisisConnect test", "working", "TEST", null));
         for (String to : adminEmails) sent.add(emailMessage(to, "Administrator", "CrisisConnect test e-mail", text, text, "TEST"));
         return sent;
     }
@@ -295,10 +326,39 @@ public class NotificationService implements CrisisNotifier {
     private Notification whatsapp(String phone, String name, String text, String event, Integer requestId) {
         Notification n = new Notification(NotificationChannel.WHATSAPP, phone.trim(), name, text, event, requestId);
         if (!isRealRecipient(phone)) return deliverSimulated(n);
+        if (whatsapp.usesTemplate()) {          // trial: the phone gets Twilio's template, the outbox keeps the full alert
+            n = new Notification(NotificationChannel.WHATSAPP, phone.trim(), name,
+                    "[Sent as Twilio trial template " + whatsapp.contentSid() + "]\n" + text, event, requestId);
+        }
         n.setStatus(Notification.Status.QUEUED);
         save(n);
-        outbox.submit(() -> update(n, whatsapp.send(phone, text)));
+        final Notification queued = n;
+        outbox.submit(() -> update(queued, whatsapp.send(phone, text)));
         return n;
+    }
+
+    /** Real SMS (CircuitDigest template) to every area number; simulated when the gateway is not configured. */
+    private List<Notification> areaSms(String var1, String var2, String event, Integer requestId) {
+        List<Notification> out = new ArrayList<>();
+        String text = SmsGateway.preview(var1, var2);
+        for (String phone : smsNumbers) {
+            Notification n = new Notification(NotificationChannel.SMS, phone, "Resident (area alert)", text, event, requestId);
+            if (!sms.isConfigured()) { out.add(deliverSimulated(n)); continue; }
+            n.setStatus(Notification.Status.QUEUED);
+            save(n);
+            outbox.submit(() -> update(n, sms.send(phone, var1, var2)));
+            out.add(n);
+        }
+        return out;
+    }
+
+    private static String disasterWord(DisasterType t) {
+        return switch (t) {
+            case ACCIDENT -> "Accident";
+            case MEDICAL_SHORTAGE -> "Medical shortage";
+            case OTHER -> "Emergency";
+            default -> t.getLabel();
+        };
     }
 
     private Notification emailMessage(String to, String name, String subject, String realText, String storedText, String event) {

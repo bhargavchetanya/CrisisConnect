@@ -37,9 +37,15 @@ public class WhatsAppGateway {
     private final String authToken;
     private final String from;
     private final String apiBase;
+    private final String contentSid;    // Twilio trial: only pre-approved templates (ContentSid HX...) may be sent
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
 
     public WhatsAppGateway(String accountSid, String authToken, String from, String apiBase) {
+        this(accountSid, authToken, from, apiBase, "");
+    }
+
+    public WhatsAppGateway(String accountSid, String authToken, String from, String apiBase, String contentSid) {
+        this.contentSid = contentSid == null ? "" : contentSid.trim();
         this.accountSid = accountSid == null ? "" : accountSid.trim();
         this.authToken = authToken == null ? "" : authToken.trim();
         String f = from == null || from.isBlank() ? "+14155238886" : from.trim();     // Twilio sandbox number
@@ -52,11 +58,17 @@ public class WhatsAppGateway {
 
     public String from() { return from; }
 
+    /** True when messages are sent as a fixed Twilio template (trial accounts) instead of free text. */
+    public boolean usesTemplate() { return !contentSid.isEmpty(); }
+
+    public String contentSid() { return contentSid; }
+
     public Result send(String toPhone, String body) {
         if (!isConfigured()) return new Result(false, "WhatsApp gateway not configured");
         String to = Phones.toE164(toPhone);
         if (to == null) return new Result(false, "Invalid phone number: " + toPhone);
-        String form = "From=" + enc("whatsapp:" + from) + "&To=" + enc("whatsapp:" + to) + "&Body=" + enc(body);
+        String form = "From=" + enc("whatsapp:" + from) + "&To=" + enc("whatsapp:" + to)
+                + (usesTemplate() ? "&ContentSid=" + enc(contentSid) : "&Body=" + enc(body));
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(apiBase + "/2010-04-01/Accounts/" + accountSid + "/Messages.json"))
                     .timeout(Duration.ofSeconds(12))
@@ -89,6 +101,7 @@ public class WhatsAppGateway {
             case "63015", "21608" -> " (this number has not joined the Twilio WhatsApp sandbox - send the join code first)";
             case "63016" -> " (24-hour window closed - the number must send any message to the sandbox number again)";
             case "20003" -> " (wrong TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN)";
+            case "21654" -> " (Twilio trial: set TWILIO_CONTENT_SID to one of the trial templates)";
             default -> "";
         };
         return "Twilio " + code + ": " + msg + hint;

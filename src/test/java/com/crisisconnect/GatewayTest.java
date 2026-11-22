@@ -19,6 +19,7 @@ import com.crisisconnect.service.EmailSender;
 import com.crisisconnect.service.GoogleOAuth;
 import com.crisisconnect.service.MatchingEngine;
 import com.crisisconnect.service.NotificationService;
+import com.crisisconnect.service.SmsGateway;
 import com.crisisconnect.service.WhatsAppGateway;
 import com.crisisconnect.util.CityDirectory;
 import com.crisisconnect.util.Phones;
@@ -52,6 +53,7 @@ class GatewayTest {
     static final List<String> twilioBodies = new CopyOnWriteArrayList<>();
     static final List<String> twilioAuth = new CopyOnWriteArrayList<>();
     static final List<String> brevoBodies = new CopyOnWriteArrayList<>();
+    static final List<String> smsRequests = new CopyOnWriteArrayList<>();
     static final String ADMIN_PHONE = "9000000001", ALERT_PHONE = "9000000002", OTHER_PHONE = "9000000099";
 
     @BeforeAll
@@ -67,6 +69,13 @@ class GatewayTest {
             reply(ex, notJoined ? 400 : 201, notJoined
                     ? "{\"code\": 63015, \"message\": \"Channel Sandbox can only send messages to phone numbers that have joined the Sandbox\"}"
                     : "{\"sid\": \"SM123\", \"status\": \"queued\"}");
+        });
+        stub.createContext("/sms", ex -> {
+            String body = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            smsRequests.add(ex.getRequestURI().getQuery() + " | " + ex.getRequestHeaders().getFirst("Authorization") + " | " + body);
+            boolean unlinked = body.contains("919000000077");
+            reply(ex, unlinked ? 403 : 200, unlinked ? "{\"status\":\"error\",\"message\":\"Number not linked\",\"code\":403}"
+                    : "{\"status\":\"success\",\"message\":\"SMS sent successfully\"}");
         });
         stub.createContext("/brevo", ex -> {
             brevoBodies.add(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
@@ -190,5 +199,47 @@ class GatewayTest {
         assertEquals(2, twilioBodies.size());
         assertEquals(1, brevoBodies.size());
         assertTrue(ns.outbox(NotificationChannel.EMAIL, 1).get(0).getStatus() == Notification.Status.SENT);
+    }
+
+    @Test
+    void sosSendsTemplateSmsToPeopleInTheArea() throws Exception {
+        smsRequests.clear();
+        NotificationService ns = new NotificationService(DaoFactory.notifications(), DaoFactory.organizations(),
+                new EmailSender("", "", "CrisisConnect"), new WhatsAppGateway("", "", "", ""), "https://cc.example", 60,
+                List.of(), "", List.of(), false, new SmsGateway("cd-key", "108", base + "/sms"),
+                Phones.parseList("9000000005, 9000000077"));
+        assertTrue(ns.smsEnabled());
+        CrisisService crisis = new CrisisService(DaoFactory.organizations(), DaoFactory.resources(), DaoFactory.requests(),
+                DaoFactory.allocations(), new MatchingEngine(180));
+        crisis.addNotifier(ns);
+        EmergencyRequest r = new EmergencyRequest("Houses flooded", DisasterType.FLOOD, ResourceType.FOOD, 40, 120,
+                UrgencyLevel.HIGH, CityDirectory.require("Patiala"));
+        crisis.createRequest(r);
+        ns.flush();
+        assertEquals(2, smsRequests.size());
+        String first = smsRequests.get(0);
+        assertTrue(first.startsWith("ID=108 | cd-key | "), first);
+        assertTrue(first.contains("\"mobiles\":\"919000000005\"") && first.contains("\"var1\":\"Flood alert\"")
+                && first.contains("\"var2\":\"active in Patiala\""), first);
+        List<Notification> sms = ns.forRequest(r.getId()).stream()
+                .filter(n -> n.getChannel() == NotificationChannel.SMS && n.getEvent().equals("SOS_AREA_ALERT")).toList();
+        assertEquals(2, sms.size());
+        Notification ok = sms.stream().filter(n -> n.getRecipient().equals("+919000000005")).findFirst().orElseThrow();
+        Notification bad = sms.stream().filter(n -> n.getRecipient().equals("+919000000077")).findFirst().orElseThrow();
+        assertEquals(Notification.Status.SENT, ok.getStatus());
+        assertEquals("The Flood alert is currently active in Patiala. Please ensure safety.", ok.getMessage());
+        assertEquals(Notification.Status.FAILED, bad.getStatus());
+        assertTrue(bad.getError().contains("Number not linked"), bad.getError());
+        assertEquals("Road Industrial Accident alert", SmsGateway.clean("Road / Industrial Accident alert!"));
+        assertTrue(SmsGateway.clean("active in Some Extremely Long City Name").length() <= 30);
+    }
+
+    @Test
+    void trialTemplateIsSentWhenContentSidIsSet() {
+        twilioBodies.clear();
+        WhatsAppGateway wa = new WhatsAppGateway("AC123", "tok", "+17372508034", base, "HXabc123");
+        assertTrue(wa.send("9000000001", "free text").ok());
+        String b = twilioBodies.get(0);
+        assertTrue(b.contains("ContentSid=HXabc123") && !b.contains("Body=") && b.contains("From=whatsapp:+17372508034"), b);
     }
 }

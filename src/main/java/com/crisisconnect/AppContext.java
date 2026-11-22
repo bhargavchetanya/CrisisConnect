@@ -13,6 +13,7 @@ import com.crisisconnect.service.GoogleOAuth;
 import com.crisisconnect.service.MatchingEngine;
 import com.crisisconnect.service.NotificationService;
 import com.crisisconnect.service.ReportService;
+import com.crisisconnect.service.SmsGateway;
 import com.crisisconnect.service.WhatsAppGateway;
 import com.crisisconnect.util.Phones;
 import java.util.List;
@@ -58,13 +59,16 @@ public final class AppContext {
         EmailSender email = new EmailSender(cfg.getString("brevo.api.key", ""), cfg.getString("email.from", ""),
                 cfg.getString("email.from.name", "CrisisConnect"));
         WhatsAppGateway whatsapp = new WhatsAppGateway(cfg.getString("twilio.account.sid", ""),
-                cfg.getString("twilio.auth.token", ""), cfg.getString("twilio.whatsapp.from", ""), "");
+                cfg.getString("twilio.auth.token", ""), cfg.getString("twilio.whatsapp.from", ""), "",
+                cfg.getString("twilio.content.sid", ""));
         List<String> adminEmails = Arrays.stream(cfg.getString("admin.emails", "").split("[,; ]+"))
                 .map(String::trim).filter(s -> !s.isEmpty()).toList();
         notificationService = new NotificationService(DaoFactory.notifications(), DaoFactory.organizations(), email, whatsapp,
                 publicUrl(cfg), cfg.getDouble("notify.critical.radiusKm", 60),
                 Phones.parseList(cfg.getString("whatsapp.alert.numbers", "")), cfg.getString("admin.whatsapp", ""),
-                adminEmails, cfg.getBoolean("whatsapp.send.to.all", false));
+                adminEmails, cfg.getBoolean("whatsapp.send.to.all", false),
+                new SmsGateway(cfg.getString("circuitdigest.api.key", ""), cfg.getString("sms.template.id", "108"), ""),
+                Phones.parseList(cfg.getString("sms.alert.numbers", "")));
         crisisService.addNotifier(notificationService);           // observer: SMS / WhatsApp simulation
         auditService = new AuditService(DaoFactory.audit());
         authService = new AuthService(DaoFactory.users(), DaoFactory.organizations(), notificationService, auditService,
@@ -77,6 +81,7 @@ public final class AppContext {
         LOG.info("Google sign-in: " + (googleOAuth.isConfigured() ? "enabled" : "not configured"));
         LOG.info("Application context ready (e-mail: " + (email.isConfigured() ? "Brevo" : "simulated")
                 + ", WhatsApp: " + (whatsapp.isConfigured() ? "Twilio -> " + notificationService.realWhatsAppNumbers().size() + " number(s)" : "simulated")
+                + ", SMS: " + (notificationService.smsEnabled() ? "CircuitDigest -> " + notificationService.smsNumbers().size() + " number(s)" : "simulated")
                 + ", public URL " + notificationService.publicUrl() + ")");
     }
 

@@ -18,4 +18,4 @@ COPY website ./website
 COPY config ./config
 EXPOSE 8080
 # Cloud hosts (Render, Railway, ...) pass the port in $PORT; locally it falls back to 8080
-CMD ["sh", "-c", "java -XX:MaxRAMPercentage=75 -Dapi.port=${PORT:-8080} -cp 'app.jar:lib/*' com.crisisconnect.api.ApiServerMain"]
+CMD ["sh", "-c", "java -XX:MaxRAMPercentage=75 -Duser.timezone=${TZ:-Asia/Kolkata} -Dapi.port=${PORT:-8080} -cp 'app.jar:lib/*' com.crisisconnect.api.ApiServerMain"]

@@ -196,7 +196,7 @@
   async function loadOutbox() {
     try {
       const [list, o] = await Promise.all([api("/api/admin/outbox?limit=120&channel=" + channel), api("/api/admin/overview")]);
-      $("#outboxNote").textContent = `WhatsApp: ${o.whatsappMode} · e-mail: ${o.emailMode} · SMS: simulated · ${fmt(o.messages)} messages`;
+      $("#outboxNote").textContent = `WhatsApp: ${o.whatsappMode} · e-mail: ${o.emailMode} · SMS: ${o.smsMode || 'simulated'} · ${fmt(o.messages)} messages`;
       $("#outbox").innerHTML = list.length ? list.map(msgCard).join("")
         : `<div class="empty panel">No messages yet. Raise an SOS with a phone number, or run Smart Match.</div>`;
     } catch (e) { handleError(e); }
@@ -265,7 +265,7 @@
         else toast("Test sent", `${ok} delivered to the gateway · ${failed} failed · ${res.length - ok - failed} simulated`, failed ? "err" : "");
         loadOutbox();
       } catch (e) { handleError(e); }
-      finally { testBtn.disabled = false; testBtn.textContent = "📲 Send test WhatsApp + e-mail"; }
+      finally { testBtn.disabled = false; testBtn.textContent = "📲 Send test alerts"; }
     };
     $("#logout").onclick = async () => {
       try { await api("/api/auth/logout", { method: "POST" }); } catch (_) { /* ignore */ }

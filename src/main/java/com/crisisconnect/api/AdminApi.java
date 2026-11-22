@@ -55,6 +55,8 @@ final class AdminApi {
             m.put("emailMode", notifications.emailEnabled() ? "real (Brevo)" : "simulated");
             m.put("whatsappMode", notifications.whatsappEnabled()
                     ? "real (Twilio) to " + notifications.realWhatsAppNumbers().size() + " number(s)" : "simulated");
+            m.put("smsMode", notifications.smsEnabled()
+                    ? "real (CircuitDigest) to " + notifications.smsNumbers().size() + " area number(s)" : "simulated");
             m.put("recentMessages", Json.list(notifications.outbox(null, 6), Json::of));
             return m;
         });

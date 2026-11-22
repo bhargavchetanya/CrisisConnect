@@ -32,3 +32,9 @@ services:
         sync: false
       - key: WHATSAPP_ALERT_NUMBERS
         sync: false
+      - key: TWILIO_CONTENT_SID
+        sync: false
+      - key: CIRCUITDIGEST_API_KEY
+        sync: false
+      - key: SMS_ALERT_NUMBERS
+        sync: false
