@@ -172,8 +172,18 @@ public class AuthService {
             u.setRole(organizationId != null ? Role.ORGANIZATION : Role.COORDINATOR);
             users.save(u);
         }
+        if (organizationId != null) {
+            // Organizations: no code e-mail - the administrator reviews the request, and the first e-mail the
+            // organization receives is the approval.
+            u.setEmailVerified(true);
+            users.update(u);
+            audit.log(mail, "SIGN_UP", "requested organization access", ip);
+            notifications.newSignupForAdmins(u.getName(), u.getEmail(),
+                    orgs.findById(organizationId).map(Organization::getName).orElse(null), "organization request");
+            return new Registration(u, null);
+        }
         String code = issueCode(u);
-        audit.log(mail, "SIGN_UP", organizationId != null ? "requested organization access" : "requested coordinator access", ip);
+        audit.log(mail, "SIGN_UP", "requested coordinator access", ip);
         return new Registration(u, showDevCodes && !notifications.emailEnabled() ? code : null);
     }
 

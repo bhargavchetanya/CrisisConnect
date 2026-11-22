@@ -99,7 +99,7 @@ final class AuthApi {
                    o.setLocation(CityDirectory.find(c.field("newOrgCity")).orElse(null));
                    o.setContactPhone(c.field("newOrgPhone"));
                    o.setEmail(c.field("email"));
-                   created = crisis.registerOrganization(o);      // also alerts the administrator
+                   created = crisis.registerOrganization(o, false);   // the sign-up e-mail tells the administrator
                    orgId = created.getId();
                }
                AuthService.Registration reg;
@@ -112,7 +112,10 @@ final class AuthApi {
                Map<String, Object> out = new LinkedHashMap<>();
                out.put("ok", true);
                out.put("email", reg.user().getEmail());
-               out.put("message", "We sent a 6-digit code to " + reg.user().getEmail() + ". Enter it to verify your e-mail.");
+               out.put("needsCode", !reg.user().isEmailVerified());
+               out.put("message", reg.user().isEmailVerified()
+                       ? "Request sent. An administrator will review it - you will get an e-mail at " + reg.user().getEmail() + " once it is approved."
+                       : "We sent a 6-digit code to " + reg.user().getEmail() + ". Enter it to verify your e-mail.");
                if (reg.devCode() != null) out.put("devCode", reg.devCode());
                c.status(201);
                return out;

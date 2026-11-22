@@ -81,7 +81,8 @@
     try {
       const r = await api("/api/auth/register", { method: "POST", data: f });
       msg(box, "");
-      startVerify(r.email, r.devCode);
+      if (r.needsCode === false) { $("#doneMsg").textContent = r.message; show("doneView"); }
+      else startVerify(r.email, r.devCode);
     } catch (err) {
       msg(box, err.errors.map(escapeHtml).join("<br>"));
     } finally { btn.disabled = false; }

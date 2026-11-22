@@ -70,6 +70,11 @@ public class CrisisService {
     //  Organizations
     // =====================================================================
     public Organization registerOrganization(Organization o) throws ValidationException {
+        return registerOrganization(o, true);
+    }
+
+    /** @param notify false when the organization comes from a sign-up (the sign-up alert already covers it) */
+    public Organization registerOrganization(Organization o, boolean notify) throws ValidationException {
         Validator.start()
                 .notBlank(o.getName(), "Organization name")
                 .notNull(o.getType(), "Organization type")
@@ -83,7 +88,7 @@ public class CrisisService {
         o.setName(o.getName().trim());
         orgDao.save(o);
         events.publish(new CrisisEvent(CrisisEvent.Type.ORGANIZATION_ADDED, o.getName() + " joined the network"));
-        fire(n -> n.organizationRegistered(o));
+        if (notify) fire(n -> n.organizationRegistered(o));
         return o;
     }
 
