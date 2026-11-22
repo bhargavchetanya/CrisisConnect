@@ -261,8 +261,13 @@ public class CrisisService {
     // =====================================================================
     /** Preview only - nothing is written. */
     public MatchResult previewMatching() {
+        return previewMatching(r -> true);
+    }
+
+    /** @param scope which requests to serve (e.g. only one coordinator's area); stock may come from anywhere in range */
+    public MatchResult previewMatching(java.util.function.Predicate<EmergencyRequest> scope) {
         List<EmergencyRequest> verified = new ArrayList<>(requestDao.findActive());
-        verified.removeIf(r -> !r.isVerified());          // unverified SOS wait for an officer
+        verified.removeIf(r -> !r.isVerified() || !scope.test(r));     // unverified SOS wait for an officer
         return engine.plan(verified, resourceDao.findAvailable());
     }
 
@@ -272,8 +277,13 @@ public class CrisisService {
      * and the other requests are not affected.
      */
     public synchronized MatchReport runMatching() {
+        return runMatching(r -> true);
+    }
+
+    /** Smart Match for the requests in scope only (a coordinator dispatches for his own area). */
+    public synchronized MatchReport runMatching(java.util.function.Predicate<EmergencyRequest> scope) {
         long start = System.currentTimeMillis();
-        MatchResult result = previewMatching();
+        MatchResult result = previewMatching(scope);
         List<String> log = new ArrayList<>();
 
         // group plans per request, keeping priority order

@@ -1,25 +1,25 @@
 package com.crisisconnect.api;
 
-import com.crisisconnect.util.CityDirectory;
-import com.crisisconnect.service.CrisisService;
-import com.crisisconnect.model.OrganizationType;
-import com.crisisconnect.model.Organization;
 import com.crisisconnect.exception.AuthException;
+import com.crisisconnect.exception.ValidationException;
+import com.crisisconnect.model.Organization;
+import com.crisisconnect.model.OrganizationType;
 import com.crisisconnect.model.Role;
 import com.crisisconnect.model.User;
 import com.crisisconnect.service.AuditService;
 import com.crisisconnect.service.AuthService;
+import com.crisisconnect.service.CrisisService;
 import com.crisisconnect.service.GoogleOAuth;
+import com.crisisconnect.util.CityDirectory;
 import com.crisisconnect.util.Security;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ConcurrentHashMap;
-
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** /api/auth/* - sign-up with e-mail code, login / logout, current user, change password. */
 final class AuthApi {
@@ -93,7 +93,7 @@ final class AuthApi {
                limit(c, "register");
                if ("officer".equals(c.field("accountType"))) {   // government verification officer
                    User off = auth.registerOfficer(c.field("name"), c.field("email"), c.form().get("password"),
-                           c.field("officerCity"), c.field("designation"), c.ip());
+                           c.field("areaCity"), c.field("designation"), c.ip());
                    Map<String, Object> out = new LinkedHashMap<>();
                    out.put("ok", true);
                    out.put("email", off.getEmail());
@@ -117,7 +117,10 @@ final class AuthApi {
                }
                AuthService.Registration reg;
                try {
-                   reg = auth.register(c.field("name"), c.field("email"), c.form().get("password"), orgId, c.ip());
+                   // coordinators must name the area (city) they coordinate
+                   String area = orgId == null ? c.field("areaCity") : null;
+                   if (orgId == null && area.isBlank()) throw new ValidationException("Please choose the area (city) you coordinate");
+                   reg = auth.register(c.field("name"), c.field("email"), c.form().get("password"), orgId, area, c.ip());
                } catch (Exception e) {
                    if (created != null) crisis.deleteOrganization(created.getId());   // keep the list clean
                    throw e;

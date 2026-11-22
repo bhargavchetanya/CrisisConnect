@@ -39,11 +39,17 @@
     const opts = (list, label) => list.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(label(v))}</option>`).join("");
     $("#newOrgType").innerHTML = opts(m.organizationTypes, t => t.charAt(0) + t.slice(1).toLowerCase());
     $("#newOrgCity").innerHTML = `<option value="">Select city</option>` + opts(m.cities, c => c);
-    $("#officerCity").innerHTML = `<option value="">Select city</option>` + opts(m.cities, c => c);
+    $("#areaCity").innerHTML = `<option value="">Select city</option>` + opts(m.cities, c => c);
   }).catch(() => {});
   const syncOrgFields = () => {
     $("#newOrgFields").hidden = $("#orgSelect").value !== "new";
-    $("#officerFields").hidden = $("#orgSelect").value !== "officer";
+    const v = $("#orgSelect").value, officer = v === "officer", coordinator = v === "";
+    $("#areaFields").hidden = !(officer || coordinator);
+    $("#designationField").hidden = !officer;
+    $("#areaLabel").textContent = officer ? "City you verify SOS for" : "Area (city) you coordinate";
+    $("#areaNote").textContent = officer
+      ? "Use your official e-mail. A coordinator or administrator of your area confirms you once; you then get an e-mail and can log in any time."
+      : "You will handle SOS requests and Smart Match for this area. We verify your e-mail, then an administrator approves you.";
   };
   $("#orgSelect").addEventListener("change", syncOrgFields);
   syncOrgFields();
@@ -74,12 +80,15 @@
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) errs.push("Enter a valid e-mail");
     if (f.password.length < 8 || !/[A-Za-z]/.test(f.password) || !/[0-9]/.test(f.password)) errs.push("Password needs 8+ characters with a letter and a number");
     if (f.organizationId === "officer") {
-      if (!f.officerCity) errs.push("Choose the city you verify SOS requests for");
+      if (!f.areaCity) errs.push("Choose the city you verify SOS requests for");
       if (!f.designation.trim()) errs.push("Enter your designation / department");
       f.accountType = "officer";
       f.organizationId = "";
+    } else if (f.organizationId === "") {
+      if (!f.areaCity) errs.push("Choose the area (city) you coordinate");
+      delete f.designation;
     } else {
-      delete f.officerCity; delete f.designation;
+      delete f.areaCity; delete f.designation;
     }
     if (f.organizationId === "new") {
       if (!f.newOrgName.trim()) errs.push("Enter your organization's name");

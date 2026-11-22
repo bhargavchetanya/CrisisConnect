@@ -143,4 +143,34 @@ class VerificationTest {
         assertThrows(ValidationException.class,
                 () -> auth.registerOfficer("A", ADMIN, "Verify#2026", "Patiala", "Officer", "ip"));
     }
+
+    @Test
+    void coordinatorsWorkOnlyInTheirOwnArea() throws Exception {
+        User patialaCoord = new User("patiala.coord@crisis.test", "P Coord", "x");
+        patialaCoord.setRole(Role.COORDINATOR);
+        patialaCoord.setStatus(UserStatus.ACTIVE);
+        patialaCoord.setCity("Patiala");
+        patialaCoord.setId(9998);
+        assertTrue(AuthService.inArea(patialaCoord, "patiala"));
+        assertFalse(AuthService.inArea(patialaCoord, "Ludhiana"));
+        assertTrue(AuthService.inArea(admin, "Ludhiana"), "administrators cover every area");
+
+        // officers: a Patiala coordinator approves Patiala officers only
+        User ludhianaOfficer = auth.registerOfficer("L Officer", "ldh.officer@punjab.gov.in", "Verify#2026",
+                "Ludhiana", "Naib Tehsildar", "ip");
+        assertThrows(ValidationException.class, () -> auth.approve(patialaCoord, ludhianaOfficer.getId(), "ip"));
+        assertTrue(auth.listOfficers(patialaCoord).stream().noneMatch(o -> o.getCity().equals("Ludhiana")));
+        auth.approve(admin, ludhianaOfficer.getId(), "ip");
+        assertEquals(1, auth.activeOfficersFor("Ludhiana").size(), "Ludhiana SOS e-mails go to the Ludhiana officer");
+        assertTrue(auth.activeOfficersFor("Ludhiana").stream().noneMatch(o -> o.getCity().equals("Patiala")));
+
+        // Smart Match run by the Patiala coordinator never serves a Ludhiana SOS
+        EmergencyRequest ldh = new EmergencyRequest("Ludhiana flood", DisasterType.FLOOD, ResourceType.FOOD, 10, 40,
+                UrgencyLevel.CRITICAL, CityDirectory.require("Ludhiana"));
+        crisis.createRequest(ldh);                                           // verified (desktop)
+        crisis.runMatching(r -> AuthService.inArea(patialaCoord, r.getCity()));
+        assertEquals(0, crisis.request(ldh.getId()).orElseThrow().getQuantityFulfilled());
+        crisis.runMatching(r -> AuthService.inArea(admin, r.getCity()));
+        assertTrue(crisis.request(ldh.getId()).orElseThrow().getQuantityFulfilled() > 0, "the administrator's run covers it");
+    }
 }

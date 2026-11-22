@@ -22,7 +22,7 @@
         <div class="role-card"><span class="ic">🌐</span><div><b>Public — no account</b><span>View live operations, raise an SOS and track it with its tracking ID.</span></div></div>
         <div class="role-card"><span class="ic">🏥</span><div><b>Organization</b><span>NGOs, hospitals and suppliers offer and restock their own resources and see live needs. The team decides dispatch.</span></div></div>
         <div class="role-card"><span class="ic">🏛️</span><div><b>Verification officer</b><span>Government officers check public SOS requests of their city by phone and verify or reject them before help is dispatched.</span></div></div>
-        <div class="role-card"><span class="ic">🧭</span><div><b>Coordinator</b><span>Runs Smart Match, manages requests, resources and organizations, approves verification officers.</span></div></div>
+        <div class="role-card"><span class="ic">🧭</span><div><b>Coordinator</b><span>Looks after one area: runs Smart Match for it, manages its SOS requests and approves its verification officers.</span></div></div>
         <div class="role-card"><span class="ic">🛡️</span><div><b>Administrator</b><span>Approves organizations, officers and coordinators, dispatches with Smart Match, reads the audit log.</span></div></div>
       </div>
     </div>
@@ -84,12 +84,12 @@
             </div>
             <label class="field">Contact phone (WhatsApp) <input name="newOrgPhone" inputmode="tel" placeholder="10-digit mobile"></label>
           </div>
-          <div id="officerFields" class="new-org" hidden>
+          <div id="areaFields" class="new-org" hidden>
             <div class="row2">
-              <label class="field">City you verify for <select name="officerCity" id="officerCity"></select></label>
-              <label class="field">Designation / department <input name="designation" maxlength="100" placeholder="e.g. Tehsildar, Revenue Dept."></label>
+              <label class="field"><span id="areaLabel">Your area (city)</span> <select name="areaCity" id="areaCity"></select></label>
+              <label class="field" id="designationField">Designation / department <input name="designation" maxlength="100" placeholder="e.g. Tehsildar, Revenue Dept."></label>
             </div>
-            <p class="muted small" style="margin:0">Use your official e-mail. A coordinator or administrator confirms you once; you then get an e-mail and can log in any time.</p>
+            <p class="muted small" style="margin:0" id="areaNote"></p>
           </div>
           <label class="field">Password <input name="password" type="password" minlength="8" required autocomplete="new-password" placeholder="8+ characters, a letter and a number"></label>
           <div id="registerMsg" class="notice err" hidden></div>

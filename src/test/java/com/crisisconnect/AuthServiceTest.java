@@ -53,7 +53,7 @@ class AuthServiceTest {
 
     @Test
     void signUpNeedsVerificationThenApproval() throws Exception {
-        AuthService.Registration reg = auth.register("Memansi", "memansi@thapar.edu", "Relief2026", null, "127.0.0.1");
+        AuthService.Registration reg = auth.register("Memansi", "memansi@thapar.edu", "Relief2026", null, "Patiala", "127.0.0.1");
         assertNotNull(reg.devCode(), "demo mode exposes the code when no e-mail provider is configured");
 
         AuthException notVerified = assertThrows(AuthException.class,
@@ -82,7 +82,7 @@ class AuthServiceTest {
 
     @Test
     void fiveWrongPasswordsLockTheAccount() throws Exception {
-        var reg = auth.register("Harschelle", "harschelle@thapar.edu", "Relief2026", null, "ip");
+        var reg = auth.register("Harschelle", "harschelle@thapar.edu", "Relief2026", null, "Patiala", "ip");
         User u = auth.verifyEmail("harschelle@thapar.edu", reg.devCode(), "ip");
         auth.approve(auth.login(ADMIN, "AdminPass#2026", "ip", "ua").user(), u.getId(), "ip");
         for (int i = 1; i < AuthService.MAX_FAILED_LOGINS; i++) {

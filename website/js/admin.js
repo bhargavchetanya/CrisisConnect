@@ -29,6 +29,7 @@
     $("#app").hidden = false;
     $("#meName").textContent = me.name;
     $("#meOrg").textContent = me.role === "OFFICER" ? `${me.designation || "Officer"} · ${me.city || ""}`
+      : me.role === "COORDINATOR" ? `Area: ${me.city || "all areas"}${me.organization ? " · " + me.organization : ""}`
       : me.organization || (me.role === "ORGANIZATION" ? "No organization linked yet" : "All organizations");
     $("#avatar").textContent = me.name.charAt(0).toUpperCase();
     $("#rolePill").textContent = me.roleLabel;
@@ -121,7 +122,7 @@
   async function runMatch() {
     const btn = $("#runMatch"), out = $("#matchConsole");
     btn.disabled = true;
-    out.textContent = "> running smart match...\n";
+    out.textContent = `> running smart match for ${me.role === "COORDINATOR" && me.city ? me.city + " (your area)" : "all areas"}...\n`;
     try {
       const rep = await api("/api/match", { method: "POST" });
       for (const line of rep.log.join("\n").split("\n")) {
@@ -248,9 +249,12 @@
       setPending(pending.length);
       $("#pendingPanel").hidden = !pending.length;
       $("#pendingList").innerHTML = pending.map(u => `<div class="toolbar" style="padding:10px 0;border-bottom:1px solid #182040;margin:0">
-          <div><b>${h(u.name)}</b> <span class="muted">${h(u.email)}</span><div class="sub muted small">${h(ROLE_LABEL[u.role])} · ${h(u.role === "OFFICER" ? (u.designation || "") + ", " + (u.city || "") : u.organization || "No organization")} · signed up ${ago(u.createdAt)}</div></div>
+          <div><b>${h(u.name)}</b> <span class="muted">${h(u.email)}</span><div class="sub muted small">${h(ROLE_LABEL[u.role])} · ${h(u.role === "OFFICER" ? (u.designation || "") + ", " + (u.city || "")
+            : u.role === "COORDINATOR" ? "Area: " + (u.city || "not set - choose it in the table below") : u.organization || "No organization")} · signed up ${ago(u.createdAt)}</div></div>
           <div class="actions" style="margin-left:auto"><button class="btn btn-green btn-xs" data-approve="${u.id}">✓ Approve</button>
           <button class="btn btn-danger btn-xs" data-deluser="${u.id}" data-title="${h(u.email)}">Reject</button></div></div>`).join("");
+      const areaOpts = (sel, allowAll) => (allowAll || !sel ? `<option value="" ${sel ? "" : "selected"}>${allowAll ? "Set area…" : "Select city"}</option>` : "")
+        + meta.cities.map(c => `<option ${c === sel ? "selected" : ""}>${h(c)}</option>`).join("");
       const orgOpts = sel => `<option value="">All organizations</option>` + orgs.map(x => `<option value="${x.id}" ${x.id === sel ? "selected" : ""}>${h(x.name)}</option>`).join("");
       $("#userBody").innerHTML = users.map(u => {
         const self = u.id === me.id;
@@ -259,7 +263,9 @@
           <td>${me.role === "ADMIN" && u.role !== "OFFICER"
             ? `<select class="inp sm" data-role="${u.id}" ${self ? "disabled" : ""}>${["ORGANIZATION", "COORDINATOR", "ADMIN"].map(r => `<option value="${r}" ${r === u.role ? "selected" : ""}>${ROLE_LABEL[r]}</option>`).join("")}</select>`
             : `<span class="role-pill ${u.role}">${h(ROLE_LABEL[u.role])}</span>`}</td>
-          <td>${u.role === "OFFICER" ? `<span class="small">${h(u.city || "")}</span><div class="sub">${h(u.designation || "")}</div>`
+          <td>${me.role === "ADMIN" && (u.role === "OFFICER" || u.role === "COORDINATOR")
+            ? `<select class="inp sm" data-area="${u.id}" style="max-width:170px">${areaOpts(u.city, u.role === "COORDINATOR")}</select>${u.designation ? `<div class="sub">${h(u.designation)}</div>` : ""}`
+            : u.role === "OFFICER" ? `<span class="small">${h(u.city || "")}</span><div class="sub">${h(u.designation || "")}</div>`
             : me.role === "ADMIN" ? `<select class="inp sm" data-org="${u.id}" style="max-width:210px">${orgOpts(u.organizationId)}</select>` : "—"}</td>
           <td><span class="pill ${u.status}">${u.status}</span></td>
           <td class="small">${u.lastLoginAt ? ago(u.lastLoginAt) : "never"}</td>
@@ -290,6 +296,7 @@
     $("#profile").innerHTML = `<span>Name</span><b>${h(me.name)}</b><span>E-mail</span><b>${h(me.email)}</b>
       <span>Role</span><b>${h(me.roleLabel)}</b>${me.role === "OFFICER"
         ? `<span>Verifies SOS in</span><b>${h(me.city || "")}</b><span>Designation</span><b>${h(me.designation || "")}</b>`
+        : me.role === "COORDINATOR" ? `<span>Area</span><b>${h(me.city || "All areas")}</b>`
         : `<span>Organization</span><b>${h(me.organization || "All organizations")}</b>`}
       <span>Member since</span><b>${when(me.createdAt)}</b>`;
   }
@@ -337,6 +344,10 @@
         } else if (t.dataset.role) {
           await api(`/api/admin/users/${t.dataset.role}/role`, { method: "POST", data: { role: t.value } });
           toast("Role updated", "Now: " + ROLE_LABEL[t.value]);
+          loadUsers();
+        } else if (t.dataset.area) {
+          await api(`/api/admin/users/${t.dataset.area}/area`, { method: "POST", data: { city: t.value } });
+          toast("Area updated", t.value || "All areas");
           loadUsers();
         } else if (t.dataset.org) {
           await api(`/api/admin/users/${t.dataset.org}/organization`, { method: "POST", data: { organizationId: t.value } });

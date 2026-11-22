@@ -179,8 +179,13 @@ class GatewayTest {
 
         var admin = auth.login("admin@example.org", "AdminPass#2026", "ip", "ua").user();
         var lead = DaoFactory.users().findByEmail("relief.lead@example.org").orElseThrow();
+        assertThrows(com.crisisconnect.exception.ValidationException.class, () -> auth.approve(admin, lead.getId(), "ip"),
+                "a coordinator needs an area (city) before approval");
+        auth.setArea(admin, lead.getId(), "Patiala", "ip");
         auth.approve(admin, lead.getId(), "ip");
-        assertEquals(Role.COORDINATOR, auth.loginWithGoogle(p, "ip", "ua").user().getRole());
+        var coord = auth.loginWithGoogle(p, "ip", "ua").user();
+        assertEquals(Role.COORDINATOR, coord.getRole());
+        assertEquals("Patiala", coord.getCity());
 
         // the administrator can also use Google with the same address
         var adminLogin = auth.loginWithGoogle(new GoogleOAuth.Profile("9", "ADMIN@example.org", true, "Admin"), "ip", "ua");

@@ -43,6 +43,8 @@ public class AuthService {
     public static final int MAX_CODE_ATTEMPTS = 5;
     public static final String DEMO_EMAIL = "coordinator@demo.crisisconnect.in";
     public static final String DEMO_PASSWORD = "DemoPass#2026";
+    /** The demo coordinator looks after this area. */
+    public static final String DEMO_AREA = "Patiala";
 
     /** Result of a successful login: the raw session token goes into the cookie, never into the database. */
     public record Login(User user, String token, LocalDateTime expiresAt) { }
@@ -123,9 +125,14 @@ public class AuthService {
 
     /** Creates the public demo coordinator (only for the demo scenario). */
     public void seedDemoCoordinator() {
-        if (users.findByEmail(DEMO_EMAIL).isPresent()) return;
+        Optional<User> existing = users.findByEmail(DEMO_EMAIL);
+        if (existing.isPresent()) {
+            if (existing.get().getCity() == null) { existing.get().setCity(DEMO_AREA); users.update(existing.get()); }
+            return;
+        }
         User u = new User(DEMO_EMAIL, "Demo Coordinator", Security.hashPassword(DEMO_PASSWORD));
         u.setRole(Role.COORDINATOR);
+        u.setCity(DEMO_AREA);
         u.setStatus(UserStatus.ACTIVE);
         u.setEmailVerified(true);
         orgs.findByName("NDRF 7th Battalion").ifPresent(o -> u.setOrganizationId(o.getId()));
@@ -138,6 +145,20 @@ public class AuthService {
     // =====================================================================
     public Registration register(String name, String email, String password, Integer organizationId, String ip)
             throws ValidationException {
+        return register(name, email, password, organizationId, null, ip);
+    }
+
+    /**
+     * @param area coordinators: the city (area) they look after - required when the request comes from the web form
+     *             (Google sign-ups get their area from the administrator before approval)
+     */
+    public Registration register(String name, String email, String password, Integer organizationId, String area, String ip)
+            throws ValidationException {
+        String areaCity = null;
+        if (organizationId == null && area != null) {
+            areaCity = com.crisisconnect.util.CityDirectory.find(area).map(g -> g.getCity())
+                    .orElseThrow(() -> new ValidationException("Please choose the area (city) you coordinate"));
+        }
         String mail = normEmail(email);
         Validator.start()
                 .notBlank(name, "Name")
@@ -161,6 +182,7 @@ public class AuthService {
             }
             // an abandoned, never-verified sign-up: let the person start again (they still need the inbox)
             u.setName(name.trim());
+            u.setCity(areaCity);
             u.setOrganizationId(organizationId);
             u.setRole(organizationId != null ? Role.ORGANIZATION : Role.COORDINATOR);
             users.update(u);
@@ -168,6 +190,7 @@ public class AuthService {
             users.deleteSessionsFor(u.getId());
         } else {
             u = new User(mail, name.trim(), Security.hashPassword(password));
+            u.setCity(areaCity);
             u.setOrganizationId(organizationId);
             u.setRole(organizationId != null ? Role.ORGANIZATION : Role.COORDINATOR);
             users.save(u);
@@ -183,7 +206,7 @@ public class AuthService {
             return new Registration(u, null);
         }
         String code = issueCode(u);
-        audit.log(mail, "SIGN_UP", "requested coordinator access", ip);
+        audit.log(mail, "SIGN_UP", "requested coordinator access" + (areaCity == null ? "" : " for " + areaCity), ip);
         return new Registration(u, showDevCodes && !notifications.emailEnabled() ? code : null);
     }
 
@@ -429,6 +452,9 @@ public class AuthService {
     public User approve(User admin, int id, String ip) throws EntityNotFoundException, ValidationException {
         User u = users.findById(id).orElseThrow(() -> new EntityNotFoundException("User", id));
         requireCanManage(admin, u);
+        if ((u.getRole() == Role.COORDINATOR || u.getRole() == Role.OFFICER) && u.getCity() == null) {
+            throw new ValidationException("Set the area (city) of " + u.getEmail() + " before approving");
+        }
         if (!u.isEmailVerified()) throw new ValidationException(u.getEmail() + " has not verified their e-mail yet");
         if (u.getStatus() == UserStatus.ACTIVE) return u;
         u.setStatus(UserStatus.ACTIVE);
@@ -477,11 +503,42 @@ public class AuthService {
         return users.findAll().stream().filter(u -> u.getRole() == Role.OFFICER).toList();
     }
 
-    /** Administrators manage every account; coordinators may approve / disable / remove verification officers only. */
+    /** Verification officers of the coordinator's own area. */
+    public List<User> listOfficers(User coordinator) {
+        return listOfficers().stream().filter(o -> inArea(coordinator, o.getCity())).toList();
+    }
+
+    /**
+     * Area rule: administrators cover every city; coordinators and verification officers only their own city.
+     * (A coordinator created before areas existed, with no city, still covers every city.)
+     */
+    public static boolean inArea(User u, String city) {
+        if (u == null) return false;
+        if (u.isAdmin()) return true;
+        if (u.getCity() == null) return u.getRole() == Role.COORDINATOR;
+        return city != null && u.getCity().equalsIgnoreCase(city.trim());
+    }
+
+    /** Administrators manage every account; coordinators approve / disable / remove officers of their own area only. */
     private static void requireCanManage(User actor, User target) throws ValidationException {
         if (actor.isAdmin()) return;
-        if (actor.getRole() == Role.COORDINATOR && target.getRole() == Role.OFFICER) return;
+        if (actor.getRole() == Role.COORDINATOR && target.getRole() == Role.OFFICER) {
+            if (inArea(actor, target.getCity())) return;
+            throw new ValidationException("You can only manage verification officers of " + actor.getCity());
+        }
         throw new ValidationException("Only an administrator can manage " + target.getRole().getLabel().toLowerCase() + " accounts");
+    }
+
+    /** Administrator assigns the area (city) of a coordinator or verification officer. */
+    public User setArea(User admin, int id, String city, String ip) throws EntityNotFoundException, ValidationException {
+        User u = users.findById(id).orElseThrow(() -> new EntityNotFoundException("User", id));
+        String c = city == null || city.isBlank() ? null : com.crisisconnect.util.CityDirectory.find(city).map(g -> g.getCity())
+                .orElseThrow(() -> new ValidationException("Unknown city: " + city));
+        if (u.getRole() == Role.OFFICER && c == null) throw new ValidationException("A verification officer needs a city");
+        u.setCity(c);
+        users.update(u);
+        audit.log(admin.getEmail(), "USER_AREA", u.getEmail() + " -> " + (c == null ? "all areas" : c), ip);
+        return users.findById(id).orElse(u);
     }
 
     /** Administrators cannot lock themselves out, and bootstrap administrators cannot be changed from the web. */

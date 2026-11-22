@@ -108,8 +108,9 @@ public class ApiServer {
         // ---------------- coordinators ----------------
         api.secure("POST", "/api/match", c -> {
             var u = c.require(Role.COORDINATOR);
-            var report = service.runMatching();
-            audit.log(u.getEmail(), "RUN_MATCH", report.headline(), c.ip());
+            var report = service.runMatching(r -> AuthService.inArea(u, r.getCity()));     // a coordinator: his area only
+            audit.log(u.getEmail(), "RUN_MATCH", (u.isAdmin() || u.getCity() == null ? "all areas" : u.getCity()) + ": "
+                    + report.headline(), c.ip());
             return Json.of(report);
         });
         new AuthApi(auth, audit, google, notifications.publicUrl(), service).register(api);
