@@ -10,7 +10,7 @@
     requests: ["Emergency requests", "Re-prioritise or close SOS requests"],
     resources: ["Resources", "Stock registered by partner organizations"],
     organizations: ["Organizations", "NGOs, hospitals, government bodies and volunteer groups"],
-    outbox: ["SMS & WhatsApp outbox", "Every alert the system has sent"],
+    outbox: ["WhatsApp & e-mail outbox", "Every alert the system has sent"],
     users: ["Users", "Approve coordinators, assign roles and organizations"],
     audit: ["Audit log", "Who did what, and when"],
     account: ["My account", "Profile and password"]
@@ -102,7 +102,7 @@
         out.scrollTop = out.scrollHeight;
         await new Promise(r => setTimeout(r, 25));
       }
-      out.textContent += `> DONE in ${rep.durationMs} ms — ${rep.headline}\n> SMS + WhatsApp notifications queued in the outbox.\n`;
+      out.textContent += `> DONE in ${rep.durationMs} ms — ${rep.headline}\n> WhatsApp + e-mail notifications queued in the outbox.\n`;
       out.scrollTop = out.scrollHeight;
       toast("Smart Match complete", rep.headline, rep.unmet > 0 ? "warn" : "");
       loadOverview();
@@ -196,7 +196,7 @@
   async function loadOutbox() {
     try {
       const [list, o] = await Promise.all([api("/api/admin/outbox?limit=120&channel=" + channel), api("/api/admin/overview")]);
-      $("#outboxNote").textContent = `WhatsApp: ${o.whatsappMode} · e-mail: ${o.emailMode} · SMS: ${o.smsMode || 'simulated'} · ${fmt(o.messages)} messages`;
+      $("#outboxNote").textContent = `WhatsApp: ${o.whatsappMode} · e-mail: ${o.emailMode} ${o.smsMode && o.smsMode !== 'simulated' ? ' · SMS: ' + o.smsMode : ''} · ${fmt(o.messages)} messages`;
       $("#outbox").innerHTML = list.length ? list.map(msgCard).join("")
         : `<div class="empty panel">No messages yet. Raise an SOS with a phone number, or run Smart Match.</div>`;
     } catch (e) { handleError(e); }
@@ -309,7 +309,7 @@
       const d = b.dataset;
       try {
         if (d.cancel) {
-          if (!confirm(`Close "${d.title}"? The reporter gets an SMS.`)) return;
+          if (!confirm(`Close "${d.title}"? The reporter is notified.`)) return;
           await api(`/api/admin/requests/${d.cancel}/cancel`, { method: "POST" });
           toast("Request closed", d.title); loadRequests();
         } else if (d.restock) {

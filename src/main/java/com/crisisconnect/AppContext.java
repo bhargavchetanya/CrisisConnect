@@ -70,6 +70,7 @@ public final class AppContext {
                 adminEmails, cfg.getBoolean("whatsapp.send.to.all", false),
                 new SmsGateway(cfg.getString("circuitdigest.api.key", ""), cfg.getString("sms.template.id", "108"), ""),
                 Phones.parseList(cfg.getString("sms.alert.numbers", "")));
+        notificationService.setSimulateSms(cfg.getBoolean("sms.simulated", false));
         crisisService.addNotifier(notificationService);           // observer: SMS / WhatsApp simulation
         auditService = new AuditService(DaoFactory.audit());
         authService = new AuthService(DaoFactory.users(), DaoFactory.organizations(), notificationService, auditService,

@@ -116,6 +116,11 @@ public class NotificationService implements CrisisNotifier {
 
     public boolean whatsappEnabled() { return whatsapp.isConfigured(); }
 
+    private volatile boolean simulateSms = true;
+
+    /** Turns the simulated reporter SMS cards off (the web deployment has no SMS channel). */
+    public void setSimulateSms(boolean on) { this.simulateSms = on; }
+
     public boolean smsEnabled() { return sms.isConfigured() && !smsNumbers.isEmpty(); }
 
     public List<String> smsNumbers() { return smsNumbers; }
@@ -319,7 +324,10 @@ public class NotificationService implements CrisisNotifier {
 
     /** Reporter updates: simulated SMS, plus a real WhatsApp copy when the reporter's number is an alert number. */
     private void reporterUpdate(EmergencyRequest r, String text, String event) {
-        deliverSimulated(new Notification(NotificationChannel.SMS, r.getContactPhone().trim(), "SOS reporter", text, event, r.getId()));
+        // SMS is not part of this deployment unless the SMS gateway is configured: no simulated SMS cards
+        if (smsEnabled() || simulateSms) {
+            deliverSimulated(new Notification(NotificationChannel.SMS, r.getContactPhone().trim(), "SOS reporter", text, event, r.getId()));
+        }
         if (isRealRecipient(r.getContactPhone())) whatsapp(r.getContactPhone(), "SOS reporter", text, event, r.getId());
     }
 

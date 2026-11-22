@@ -18,7 +18,7 @@
     <a class="tab" href="#requests" data-tab="requests">🚨 Requests</a>
     <a class="tab" href="#resources" data-tab="resources">📦 Resources</a>
     <a class="tab" href="#organizations" data-tab="organizations">🏥 Organizations</a>
-    <a class="tab" href="#outbox" data-tab="outbox">💬 SMS &amp; WhatsApp</a>
+    <a class="tab" href="#outbox" data-tab="outbox">💬 WhatsApp &amp; E-mail</a>
     <div class="sep admin-only">Administration</div>
     <a class="tab admin-only" href="#users" data-tab="users">👥 Users <span class="count" id="pendingCount" hidden></span></a>
     <a class="tab admin-only" href="#audit" data-tab="audit">🧾 Audit log</a>
@@ -51,7 +51,7 @@
         <div class="panel">
           <div class="panel-head"><h3>Smart Match engine</h3><button class="btn btn-red btn-sm" id="runMatch">▶ Run Smart Match</button></div>
           <pre class="console" id="matchConsole">&gt; Ready. Dispatches are committed in JDBC transactions and every
-  reporter + supplying organization is notified by SMS / WhatsApp.</pre>
+  supplying organization and the alert team are notified on WhatsApp.</pre>
         </div>
         <div class="panel">
           <div class="panel-head"><h3>Latest messages</h3><a class="muted small" href="#outbox">Open outbox →</a></div>
@@ -116,7 +116,7 @@
     <!-- OUTBOX -->
     <section class="view" id="v-outbox">
       <div class="toolbar">
-        <div class="chips" id="chFilter"><button data-c="ALL" class="on">All</button><button data-c="SMS">SMS</button><button data-c="WHATSAPP">WhatsApp</button><button data-c="EMAIL">E-mail</button></div>
+        <div class="chips" id="chFilter"><button data-c="ALL" class="on">All</button><button data-c="WHATSAPP">WhatsApp</button><button data-c="EMAIL">E-mail</button></div>
         <span class="muted small" id="outboxNote"></span>
         <button class="btn btn-ghost btn-xs admin-only" id="sendTest" type="button" style="margin-left:auto">📲 Send test alerts</button>
       </div>
