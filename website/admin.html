@@ -17,8 +17,8 @@
     <a class="tab" href="#overview" data-tab="overview">📊 Overview</a>
     <a class="tab" href="#requests" data-tab="requests">🚨 Requests</a>
     <a class="tab" href="#resources" data-tab="resources">📦 Resources</a>
-    <a class="tab" href="#organizations" data-tab="organizations">🏥 Organizations</a>
-    <a class="tab" href="#outbox" data-tab="outbox">💬 WhatsApp &amp; E-mail</a>
+    <a class="tab staff-only" href="#organizations" data-tab="organizations">🏥 Organizations</a>
+    <a class="tab staff-only" href="#outbox" data-tab="outbox">💬 WhatsApp &amp; E-mail</a>
     <div class="sep admin-only">Administration</div>
     <a class="tab admin-only" href="#users" data-tab="users">👥 Users <span class="count" id="pendingCount" hidden></span></a>
     <a class="tab admin-only" href="#audit" data-tab="audit">🧾 Audit log</a>
@@ -47,7 +47,15 @@
         <div class="kpi k-purple"><b id="oDispatched">–</b><span>Units dispatched</span></div>
         <div class="kpi k-green"><b id="oMessages">–</b><span>Messages sent</span></div>
       </div>
-      <div class="grid-2c">
+      <div class="panel org-only" style="margin-bottom:18px">
+        <div class="panel-head"><h3>How it works for your organization</h3></div>
+        <ol class="org-steps">
+          <li><b>Offer supplies</b> in the <a href="#resources">Resources</a> tab - add what you hold (food, water, medicine, shelter, vehicles) and restock it any time.</li>
+          <li><b>See what is needed</b> in the <a href="#requests">Requests</a> tab - live SOS requests, sorted by priority.</li>
+          <li><b>The CrisisConnect team decides dispatch.</b> Every offer alerts the administrator, who runs Smart Match; your stock is then sent to the most urgent nearby requests.</li>
+        </ol>
+      </div>
+      <div class="grid-2c staff-only">
         <div class="panel">
           <div class="panel-head"><h3>Smart Match engine</h3><button class="btn btn-red btn-sm" id="runMatch">▶ Run Smart Match</button></div>
           <pre class="console" id="matchConsole">&gt; Ready. Dispatches are committed in JDBC transactions and every

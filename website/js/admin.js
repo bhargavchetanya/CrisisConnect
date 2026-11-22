@@ -11,12 +11,13 @@
     resources: ["Resources", "Stock registered by partner organizations"],
     organizations: ["Organizations", "NGOs, hospitals, government bodies and volunteer groups"],
     outbox: ["WhatsApp & e-mail outbox", "Every alert the system has sent"],
-    users: ["Users", "Approve coordinators, assign roles and organizations"],
+    users: ["Users", "Approve organizations and coordinators, assign roles"],
     audit: ["Audit log", "Who did what, and when"],
     account: ["My account", "Profile and password"]
   };
   let me = null, meta = null, orgs = [], timer = null;
   let reqFilter = "active", channel = "ALL";
+  const ROLE_LABEL = { ORGANIZATION: "Organization", COORDINATOR: "Coordinator", ADMIN: "Administrator" };
 
   // ------------------------------------------------------------------ boot
   async function boot() {
@@ -24,11 +25,13 @@
     if (!me) { location.replace("/login.html?next=" + encodeURIComponent("/admin.html" + location.hash)); return; }
     $("#app").hidden = false;
     $("#meName").textContent = me.name;
-    $("#meOrg").textContent = me.organization || (me.role === "ADMIN" ? "All organizations" : "All organizations");
+    $("#meOrg").textContent = me.organization || (me.role === "ORGANIZATION" ? "No organization linked yet" : "All organizations");
     $("#avatar").textContent = me.name.charAt(0).toUpperCase();
     $("#rolePill").textContent = me.roleLabel;
     $("#rolePill").classList.add(me.role);
     if (me.role !== "ADMIN") document.querySelectorAll(".admin-only").forEach(e => e.remove());
+    if (me.role === "ORGANIZATION") document.querySelectorAll(".staff-only").forEach(e => e.remove());
+    else document.querySelectorAll(".org-only").forEach(e => e.remove());
     meta = await api("/api/meta");
     fillSelect($("#resType"), meta.resourceTypes.map(t => [t, LABEL[t] || t]));
     fillSelect($("#resCity"), [["", "Select city"], ...meta.cities.map(c => [c, c])]);
@@ -45,7 +48,8 @@
 
   function route() {
     let tab = (location.hash || "#overview").slice(1);
-    if (!TITLES[tab] || (["users", "audit"].includes(tab) && me.role !== "ADMIN")) tab = "overview";
+    if (!TITLES[tab] || (["users", "audit"].includes(tab) && me.role !== "ADMIN")
+        || (["organizations", "outbox"].includes(tab) && me.role === "ORGANIZATION")) tab = "overview";
     document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "v-" + tab));
     document.querySelectorAll(".side a.tab").forEach(a => a.classList.toggle("on", a.dataset.tab === tab));
     $("#viewTitle").textContent = TITLES[tab][0];
@@ -78,7 +82,7 @@
       $("#oDispatched").textContent = fmt(s.unitsDispatched);
       $("#oMessages").textContent = fmt(o.messages);
       setPending(o.pendingUsers);
-      $("#recentMsgs").innerHTML = o.recentMessages.length
+      if ($("#recentMsgs")) $("#recentMsgs").innerHTML = o.recentMessages.length
         ? o.recentMessages.map(msgCard).join("")
         : `<div class="empty">No messages yet — raise an SOS or run Smart Match.</div>`;
     } catch (e) { handleError(e); }
@@ -88,7 +92,7 @@
     const c = $("#pendingCount");
     if (c) { c.textContent = n; c.hidden = !n; }
     $("#pendingBar").hidden = !n;
-    $("#pendingText").textContent = `${n} coordinator${n === 1 ? " is" : "s are"} waiting for approval`;
+    $("#pendingText").textContent = `${n} account${n === 1 ? " is" : "s are"} waiting for approval`;
   }
 
   async function runMatch() {
@@ -122,7 +126,8 @@
         .sort((a, b) => (active(b) - active(a)) || b.priority - a.priority);
       $("#reqBody").innerHTML = rows.length ? rows.map(r => {
         const pct = r.quantityNeeded ? Math.round(r.quantityFulfilled / r.quantityNeeded * 100) : 0;
-        const urg = active(r)
+        const staff = me.role !== "ORGANIZATION";
+        const urg = active(r) && staff
           ? `<select class="inp sm" data-urg="${r.id}">${["CRITICAL", "HIGH", "MEDIUM", "LOW"].map(u => `<option ${u === r.urgency ? "selected" : ""}>${u}</option>`).join("")}</select>`
           : `<span class="badge b-${r.urgency}">${r.urgency}</span>`;
         return `<tr>
@@ -133,7 +138,7 @@
           <td><div class="progress"><i style="width:${pct}%"></i></div><div class="sub">${fmt(r.quantityFulfilled)} / ${fmt(r.quantityNeeded)} ${h(r.unit)}</div></td>
           <td class="mono small">${h(r.phone || "—")}</td>
           <td><span class="pill ${r.status}">${r.status.replace("_", " ")}</span></td>
-          <td>${active(r) ? `<button class="btn btn-danger btn-xs" data-cancel="${r.id}" data-title="${h(r.title)}">Close</button>` : ""}</td>
+          <td>${active(r) && staff ? `<button class="btn btn-danger btn-xs" data-cancel="${r.id}" data-title="${h(r.title)}">Close</button>` : ""}</td>
         </tr>`;
       }).join("") : `<tr><td colspan="8" class="empty">No requests match this filter</td></tr>`;
     } catch (e) { handleError(e); }
@@ -148,7 +153,9 @@
       fillSelect($("#resOrg"), (own ? orgs.filter(x => x.id === me.organizationId) : [{ id: "", name: "Select organization" }, ...orgs])
         .map(x => [x.id, x.name]));
       $("#resOrg").disabled = !!own;
-      $("#scopeNote").textContent = own ? `You manage resources of ${me.organization}` : "You can manage every organization's resources";
+      $("#scopeNote").textContent = me.role === "ORGANIZATION"
+        ? `Supplies of ${me.organization || "your organization"} - the CrisisConnect team decides when to dispatch them`
+        : own ? `You manage resources of ${me.organization}` : "You can manage every organization's resources";
       const nameToId = Object.fromEntries(orgs.map(x => [x.name, x.id]));
       $("#resBody").innerHTML = res.length ? res.map(r => {
         const mine = !own || nameToId[r.organization] === me.organizationId;
@@ -219,7 +226,7 @@
         const self = u.id === me.id;
         return `<tr>
           <td><b>${h(u.name)}</b>${self ? ' <span class="muted small">(you)</span>' : ""}<div class="sub">${h(u.email)}${u.emailVerified ? "" : " · e-mail not verified"}</div></td>
-          <td><select class="inp sm" data-role="${u.id}" ${self ? "disabled" : ""}>${["COORDINATOR", "ADMIN"].map(r => `<option value="${r}" ${r === u.role ? "selected" : ""}>${r === "ADMIN" ? "Administrator" : "Coordinator"}</option>`).join("")}</select></td>
+          <td><select class="inp sm" data-role="${u.id}" ${self ? "disabled" : ""}>${["ORGANIZATION", "COORDINATOR", "ADMIN"].map(r => `<option value="${r}" ${r === u.role ? "selected" : ""}>${ROLE_LABEL[r]}</option>`).join("")}</select></td>
           <td><select class="inp sm" data-org="${u.id}" style="max-width:210px">${orgOpts(u.organizationId)}</select></td>
           <td><span class="pill ${u.status}">${u.status}</span></td>
           <td class="small">${u.lastLoginAt ? ago(u.lastLoginAt) : "never"}</td>
@@ -254,7 +261,7 @@
 
   // ------------------------------------------------------------------ actions (event delegation)
   function wire() {
-    $("#runMatch").onclick = runMatch;
+    if ($("#runMatch")) $("#runMatch").onclick = runMatch;
     const testBtn = $("#sendTest");
     if (testBtn) testBtn.onclick = async () => {
       testBtn.disabled = true; testBtn.textContent = "Sending…";
@@ -294,7 +301,7 @@
           loadRequests();
         } else if (t.dataset.role) {
           await api(`/api/admin/users/${t.dataset.role}/role`, { method: "POST", data: { role: t.value } });
-          toast("Role updated", t.value === "ADMIN" ? "Now an administrator" : "Now a coordinator");
+          toast("Role updated", "Now: " + ROLE_LABEL[t.value]);
           loadUsers();
         } else if (t.dataset.org) {
           await api(`/api/admin/users/${t.dataset.org}/organization`, { method: "POST", data: { organizationId: t.value } });

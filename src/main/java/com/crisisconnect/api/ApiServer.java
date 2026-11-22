@@ -110,7 +110,7 @@ public class ApiServer {
             audit.log(u.getEmail(), "RUN_MATCH", report.headline(), c.ip());
             return Json.of(report);
         });
-        new AuthApi(auth, audit, google, notifications.publicUrl()).register(api);
+        new AuthApi(auth, audit, google, notifications.publicUrl(), service).register(api);
         new AdminApi(service, auth, notifications, audit).register(api);
 
         server = HttpServer.create(new InetSocketAddress(port), 0);

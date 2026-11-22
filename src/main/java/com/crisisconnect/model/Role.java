@@ -5,6 +5,8 @@ package com.crisisconnect.model;
  * The public (no account) can view live operations, raise an SOS and track it.
  */
 public enum Role {
+    /** Staff of one organization: offers and restocks that organization's resources; dispatch is decided by the team. */
+    ORGANIZATION("Organization"),
     /** Runs Smart Match and manages requests, resources and organizations. */
     COORDINATOR("Coordinator"),
     /** Everything a coordinator can do, plus user management and the audit log. */

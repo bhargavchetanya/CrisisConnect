@@ -30,9 +30,19 @@
   window.CC.session().then(u => { if (u) location.replace(safeNext); });
 
   api("/api/organizations").then(orgs => {
-    $("#orgSelect").insertAdjacentHTML("beforeend",
-      orgs.map(o => `<option value="${o.id}">${escapeHtml(o.name)} · ${escapeHtml(o.city)}</option>`).join(""));
+    if (!orgs.length) return;
+    $("#orgSelect").insertAdjacentHTML("afterbegin", `<optgroup label="Staff of an existing organization">${
+      orgs.map(o => `<option value="${o.id}">${escapeHtml(o.name)} · ${escapeHtml(o.city)}</option>`).join("")}</optgroup>`);
+    $("#orgSelect").value = "new";
   }).catch(() => {});
+  api("/api/meta").then(m => {
+    const opts = (list, label) => list.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(label(v))}</option>`).join("");
+    $("#newOrgType").innerHTML = opts(m.organizationTypes, t => t.charAt(0) + t.slice(1).toLowerCase());
+    $("#newOrgCity").innerHTML = `<option value="">Select city</option>` + opts(m.cities, c => c);
+  }).catch(() => {});
+  const syncOrgFields = () => { $("#newOrgFields").hidden = $("#orgSelect").value !== "new"; };
+  $("#orgSelect").addEventListener("change", syncOrgFields);
+  syncOrgFields();
 
   $("#loginForm").addEventListener("submit", async e => {
     e.preventDefault();
@@ -59,6 +69,13 @@
     if (!f.name.trim()) errs.push("Enter your name");
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) errs.push("Enter a valid e-mail");
     if (f.password.length < 8 || !/[A-Za-z]/.test(f.password) || !/[0-9]/.test(f.password)) errs.push("Password needs 8+ characters with a letter and a number");
+    if (f.organizationId === "new") {
+      if (!f.newOrgName.trim()) errs.push("Enter your organization's name");
+      if (!f.newOrgCity) errs.push("Choose your organization's city");
+      f.organizationId = "";
+    } else {
+      delete f.newOrgName; delete f.newOrgType; delete f.newOrgCity; delete f.newOrgPhone;
+    }
     if (errs.length) return msg(box, errs.map(escapeHtml).join("<br>"));
     btn.disabled = true;
     try {

@@ -23,6 +23,7 @@ import com.crisisconnect.util.Validator;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -46,7 +47,7 @@ final class AdminApi {
     void register(Router api) {
         // ------------------------------------------------ overview
         api.secure("GET", "/api/admin/overview", c -> {
-            User u = c.require(Role.COORDINATOR);
+            User u = c.require(Role.ORGANIZATION);
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("user", AuthApi.session(u));
             m.put("stats", Json.of(crisis.stats()));
@@ -57,13 +58,13 @@ final class AdminApi {
                     ? "real (Twilio) to " + notifications.realWhatsAppNumbers().size() + " number(s)" : "simulated");
             m.put("smsMode", notifications.smsEnabled()
                     ? "real (CircuitDigest) to " + notifications.smsNumbers().size() + " area number(s)" : "simulated");
-            m.put("recentMessages", Json.list(notifications.outbox(null, 6), Json::of));
+            m.put("recentMessages", u.getRole() == Role.ORGANIZATION ? List.of() : Json.list(notifications.outbox(null, 6), Json::of));
             return m;
         });
 
         // ------------------------------------------------ requests
         api.secure("GET", "/api/admin/requests", c -> {
-            c.require(Role.COORDINATOR);
+            c.require(Role.ORGANIZATION);                      // organizations can see what is needed (read-only)
             return Json.list(crisis.requests(), Json::admin);
         }).secure("POST", "/api/admin/requests/{id}/cancel", c -> {
             User u = c.require(Role.COORDINATOR);
@@ -82,8 +83,9 @@ final class AdminApi {
 
         // ------------------------------------------------ resources
         api.secure("POST", "/api/admin/resources", c -> {
-            User u = c.require(Role.COORDINATOR);
+            User u = c.require(Role.ORGANIZATION);
             Integer orgId = c.optionalInt("organizationId");
+            if (u.getRole() == Role.ORGANIZATION) orgId = u.getOrganizationId();     // always their own
             if (orgId == null && u.getOrganizationId() != null && !u.isAdmin()) orgId = u.getOrganizationId();
             if (orgId == null) throw new ValidationException("Please choose an organization");
             AuthService.requireOrgScope(u, orgId);
@@ -98,18 +100,20 @@ final class AdminApi {
             }
             crisis.addResource(r);
             audit.log(u.getEmail(), "RESOURCE_ADDED", qty + " " + r.getUnit() + " of " + r.getName() + " (" + r.getCity() + ")", c.ip());
+            if (u.getRole() == Role.ORGANIZATION) notifications.resourceOffered(u, crisis.resource(r.getId()).orElse(r), qty, false);
             c.status(201);
             return Json.of(crisis.resource(r.getId()).orElse(r));
         }).secure("POST", "/api/admin/resources/{id}/restock", c -> {
-            User u = c.require(Role.COORDINATOR);
+            User u = c.require(Role.ORGANIZATION);
             Resource r = resource(c.pathInt("id"));
             AuthService.requireOrgScope(u, r.getOrganizationId());
             int qty = Validator.parseIntOr(c.field("quantity"), 0);
             crisis.restock(r.getId(), qty);
             audit.log(u.getEmail(), "RESOURCE_RESTOCKED", "+" + qty + " " + r.getUnit() + " " + r.getName(), c.ip());
+            if (u.getRole() == Role.ORGANIZATION) notifications.resourceOffered(u, r, qty, true);
             return Json.of(resource(r.getId()));
         }).secure("DELETE", "/api/admin/resources/{id}", c -> {
-            User u = c.require(Role.COORDINATOR);
+            User u = c.require(Role.ORGANIZATION);
             Resource r = resource(c.pathInt("id"));
             AuthService.requireOrgScope(u, r.getOrganizationId());
             crisis.deleteResource(r.getId());

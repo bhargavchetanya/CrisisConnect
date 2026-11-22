@@ -4,6 +4,8 @@ import com.crisisconnect.dao.DaoFactory;
 import com.crisisconnect.db.DatabaseManager;
 import com.crisisconnect.exception.AuthException;
 import com.crisisconnect.exception.ValidationException;
+import com.crisisconnect.model.Organization;
+import com.crisisconnect.model.OrganizationType;
 import com.crisisconnect.model.Role;
 import com.crisisconnect.model.User;
 import com.crisisconnect.model.UserStatus;
@@ -11,6 +13,7 @@ import com.crisisconnect.service.AuditService;
 import com.crisisconnect.service.AuthService;
 import com.crisisconnect.service.EmailSender;
 import com.crisisconnect.service.NotificationService;
+import com.crisisconnect.util.CityDirectory;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -110,5 +113,30 @@ class AuthServiceTest {
         coord.setOrganizationName("Red Cross");
         AuthService.requireOrgScope(coord, 1);
         assertThrows(AuthException.class, () -> AuthService.requireOrgScope(coord, 2));
+    }
+
+    @Test
+    void organizationAccountsOnlyManageTheirOwnResourcesAndCannotDispatch() throws Exception {
+        Organization mine = new Organization("Patiala Relief Trust", OrganizationType.NGO, "9876500001", "trust@x.in",
+                CityDirectory.require("Patiala"));
+        Organization other = new Organization("Ludhiana Food Bank", OrganizationType.NGO, "9876500002", "fb@x.in",
+                CityDirectory.require("Ludhiana"));
+        DaoFactory.organizations().save(mine);
+        DaoFactory.organizations().save(other);
+        var reg = auth.register("Org Staff", "staff@trust.org", "Relief2026", mine.getId(), "ip");
+        assertEquals(Role.ORGANIZATION, reg.user().getRole(), "signing up for an organization gives the Organization role");
+        User u = auth.verifyEmail("staff@trust.org", reg.devCode(), "ip");
+        auth.approve(auth.login(ADMIN, "AdminPass#2026", "ip", "ua").user(), u.getId(), "ip");
+        User staff = auth.login("staff@trust.org", "Relief2026", "ip", "ua").user();
+
+        AuthService.require(staff, Role.ORGANIZATION);                                   // may add / restock
+        AuthService.requireOrgScope(staff, mine.getId());                                // own resources: ok
+        assertThrows(AuthException.class, () -> AuthService.requireOrgScope(staff, other.getId()));
+        assertThrows(AuthException.class, () -> AuthService.require(staff, Role.COORDINATOR),
+                "Smart Match / dispatch needs a coordinator or the administrator");
+
+        User unlinked = new User("x@y.in", "X", "h");
+        unlinked.setRole(Role.ORGANIZATION);
+        assertThrows(AuthException.class, () -> AuthService.requireOrgScope(unlinked, mine.getId()));
     }
 }

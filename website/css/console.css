@@ -70,6 +70,9 @@
 .topbar .muted { margin-left: 2px; }
 .topbar .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
 .role-pill { font-size: .72rem; font-weight: 800; padding: 3px 9px; border-radius: 20px; background: rgba(160,107,255,.18); color: #cdb4ff; border: 1px solid rgba(160,107,255,.4); }
+.role-pill.ORGANIZATION { background: rgba(46,213,195,.14); color: #8ff0e2; border-color: rgba(46,213,195,.4); }
+.org-steps { margin: 0; padding-left: 20px; display: grid; gap: 10px; line-height: 1.55; }
+.org-steps a { color: var(--teal); }
 .role-pill.ADMIN { background: rgba(255,71,87,.15); color: #ff9aa3; border-color: rgba(255,71,87,.4); }
 .view { display: none; animation: fadein .25s ease; }
 .view.on { display: block; }
@@ -165,3 +168,8 @@
   .grid-2c { grid-template-columns: 1fr; }
   .facts { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* sign-up: new organization */
+.new-org { display: grid; gap: 12px; padding: 14px; border: 1px dashed rgba(46,213,195,.35); border-radius: 12px; background: rgba(46,213,195,.05); }
+.new-org[hidden] { display: none !important; }
+.new-org .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

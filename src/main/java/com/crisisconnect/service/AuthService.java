@@ -162,16 +162,18 @@ public class AuthService {
             // an abandoned, never-verified sign-up: let the person start again (they still need the inbox)
             u.setName(name.trim());
             u.setOrganizationId(organizationId);
+            u.setRole(organizationId != null ? Role.ORGANIZATION : Role.COORDINATOR);
             users.update(u);
             users.updatePassword(u.getId(), Security.hashPassword(password));
             users.deleteSessionsFor(u.getId());
         } else {
             u = new User(mail, name.trim(), Security.hashPassword(password));
             u.setOrganizationId(organizationId);
+            u.setRole(organizationId != null ? Role.ORGANIZATION : Role.COORDINATOR);
             users.save(u);
         }
         String code = issueCode(u);
-        audit.log(mail, "SIGN_UP", "requested coordinator access", ip);
+        audit.log(mail, "SIGN_UP", organizationId != null ? "requested organization access" : "requested coordinator access", ip);
         return new Registration(u, showDevCodes && !notifications.emailEnabled() ? code : null);
     }
 
@@ -353,7 +355,13 @@ public class AuthService {
 
     /** Coordinators linked to an organization may only change that organization's resources. */
     public static void requireOrgScope(User u, int organizationId) throws AuthException {
-        if (u.isAdmin() || u.getOrganizationId() == null) return;
+        if (u.isAdmin()) return;
+        if (u.getOrganizationId() == null) {
+            if (u.getRole() == Role.ORGANIZATION) {
+                throw AuthException.forbidden("Your account is not linked to an organization yet - ask the administrator.");
+            }
+            return;
+        }
         if (u.getOrganizationId() != organizationId) {
             throw AuthException.forbidden("You can only manage resources of " + u.getOrganizationName() + ".");
         }

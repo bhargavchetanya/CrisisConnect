@@ -1,5 +1,9 @@
 package com.crisisconnect.api;
 
+import com.crisisconnect.util.CityDirectory;
+import com.crisisconnect.service.CrisisService;
+import com.crisisconnect.model.OrganizationType;
+import com.crisisconnect.model.Organization;
 import com.crisisconnect.exception.AuthException;
 import com.crisisconnect.model.User;
 import com.crisisconnect.service.AuditService;
@@ -29,7 +33,10 @@ final class AuthApi {
     private record PendingGoogle(String verifier, String next, long expiresAt) { }
     private final Map<String, PendingGoogle> pending = new ConcurrentHashMap<>();
 
-    AuthApi(AuthService auth, AuditService audit, GoogleOAuth google, String publicUrl) {
+    private final CrisisService crisis;
+
+    AuthApi(AuthService auth, AuditService audit, GoogleOAuth google, String publicUrl, CrisisService crisis) {
+        this.crisis = crisis;
         this.auth = auth;
         this.audit = audit;
         this.google = google;
@@ -83,8 +90,25 @@ final class AuthApi {
            })
            .secure("POST", "/api/auth/register", c -> {
                limit(c, "register");
-               var reg = auth.register(c.field("name"), c.field("email"), c.form().get("password"),
-                       c.optionalInt("organizationId"), c.ip());
+               Integer orgId = c.optionalInt("organizationId");
+               Organization created = null;
+               if (!c.field("newOrgName").isEmpty()) {          // "my organization is not listed"
+                   Organization o = new Organization();
+                   o.setName(c.field("newOrgName"));
+                   o.setType(c.field("newOrgType").isEmpty() ? null : OrganizationType.valueOf(c.field("newOrgType")));
+                   o.setLocation(CityDirectory.find(c.field("newOrgCity")).orElse(null));
+                   o.setContactPhone(c.field("newOrgPhone"));
+                   o.setEmail(c.field("email"));
+                   created = crisis.registerOrganization(o);      // also alerts the administrator
+                   orgId = created.getId();
+               }
+               AuthService.Registration reg;
+               try {
+                   reg = auth.register(c.field("name"), c.field("email"), c.form().get("password"), orgId, c.ip());
+               } catch (Exception e) {
+                   if (created != null) crisis.deleteOrganization(created.getId());   // keep the list clean
+                   throw e;
+               }
                Map<String, Object> out = new LinkedHashMap<>();
                out.put("ok", true);
                out.put("email", reg.user().getEmail());
