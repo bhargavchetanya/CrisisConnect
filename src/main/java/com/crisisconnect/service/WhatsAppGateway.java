@@ -37,7 +37,8 @@ public class WhatsAppGateway {
     private final String authToken;
     private final String from;
     private final String apiBase;
-    private final String contentSid;    // Twilio trial: only pre-approved templates (ContentSid HX...) may be sent
+    private final String contentSid;
+    private final java.util.Map<String, String> fromByRecipient = new java.util.HashMap<>();  // trial: one number per tester    // Twilio trial: only pre-approved templates (ContentSid HX...) may be sent
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
 
     public WhatsAppGateway(String accountSid, String authToken, String from, String apiBase) {
@@ -54,6 +55,25 @@ public class WhatsAppGateway {
         this.apiBase = apiBase == null || apiBase.isBlank() ? "https://api.twilio.com" : apiBase.replaceAll("/+$", "");
     }
 
+    /**
+     * Twilio trial accounts assign a different WhatsApp number to each verified tester (error 572003 otherwise).
+     * Format: "6284974761=+15551234567, 9876543210=+15557654321".
+     */
+    public WhatsAppGateway fromPerRecipient(String mapping) {
+        if (mapping == null) return this;
+        for (String pair : mapping.split("[,;]")) {
+            String[] kv = pair.split("=");
+            if (kv.length != 2) continue;
+            String to = Phones.toE164(kv[0].trim());
+            String f = kv[1].trim().replace("whatsapp:", "");
+            String fe = Phones.toE164(f);
+            if (to != null && fe != null) fromByRecipient.put(to, fe);
+        }
+        return this;
+    }
+
+    public String fromFor(String toE164) { return fromByRecipient.getOrDefault(toE164, from); }
+
     public boolean isConfigured() { return !accountSid.isEmpty() && !authToken.isEmpty(); }
 
     public String from() { return from; }
@@ -67,7 +87,7 @@ public class WhatsAppGateway {
         if (!isConfigured()) return new Result(false, "WhatsApp gateway not configured");
         String to = Phones.toE164(toPhone);
         if (to == null) return new Result(false, "Invalid phone number: " + toPhone);
-        String form = "From=" + enc("whatsapp:" + from) + "&To=" + enc("whatsapp:" + to)
+        String form = "From=" + enc("whatsapp:" + fromFor(to)) + "&To=" + enc("whatsapp:" + to)
                 + (usesTemplate() ? "&ContentSid=" + enc(contentSid) : "&Body=" + enc(body));
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(apiBase + "/2010-04-01/Accounts/" + accountSid + "/Messages.json"))
@@ -101,6 +121,7 @@ public class WhatsAppGateway {
             case "63015", "21608" -> " (this number has not joined the Twilio WhatsApp sandbox - send the join code first)";
             case "63016" -> " (24-hour window closed - the number must send any message to the sandbox number again)";
             case "20003" -> " (wrong TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN)";
+            case "572003" -> " (Twilio trial: this tester has its own WhatsApp number - add it to TWILIO_WHATSAPP_FROM_MAP)";
             case "21654" -> " (Twilio trial: set TWILIO_CONTENT_SID to one of the trial templates)";
             default -> "";
         };

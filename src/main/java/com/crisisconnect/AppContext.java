@@ -60,7 +60,8 @@ public final class AppContext {
                 cfg.getString("email.from.name", "CrisisConnect"));
         WhatsAppGateway whatsapp = new WhatsAppGateway(cfg.getString("twilio.account.sid", ""),
                 cfg.getString("twilio.auth.token", ""), cfg.getString("twilio.whatsapp.from", ""), "",
-                cfg.getString("twilio.content.sid", ""));
+                cfg.getString("twilio.content.sid", ""))
+                .fromPerRecipient(cfg.getString("twilio.whatsapp.from.map", ""));
         List<String> adminEmails = Arrays.stream(cfg.getString("admin.emails", "").split("[,; ]+"))
                 .map(String::trim).filter(s -> !s.isEmpty()).toList();
         notificationService = new NotificationService(DaoFactory.notifications(), DaoFactory.organizations(), email, whatsapp,

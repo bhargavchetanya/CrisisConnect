@@ -242,4 +242,15 @@ class GatewayTest {
         String b = twilioBodies.get(0);
         assertTrue(b.contains("ContentSid=HXabc123") && !b.contains("Body=") && b.contains("From=whatsapp:+17372508034"), b);
     }
+
+    @Test
+    void eachTrialTesterCanHaveItsOwnFromNumber() {
+        twilioBodies.clear();
+        WhatsAppGateway wa = new WhatsAppGateway("AC123", "tok", "+17372508034", base, "HXabc123")
+                .fromPerRecipient("6284974761=+15550001111");
+        wa.send("6284974761", "x");
+        wa.send("9000000001", "x");
+        assertTrue(twilioBodies.get(0).contains("From=whatsapp:+15550001111"), twilioBodies.get(0));
+        assertTrue(twilioBodies.get(1).contains("From=whatsapp:+17372508034"), twilioBodies.get(1));
+    }
 }
