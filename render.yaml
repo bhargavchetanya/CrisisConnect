@@ -34,6 +34,8 @@ services:
         sync: false
       - key: TWILIO_CONTENT_SID
         sync: false
+      - key: TWILIO_WHATSAPP_FROM_MAP
+        sync: false
       - key: CIRCUITDIGEST_API_KEY
         sync: false
       - key: SMS_ALERT_NUMBERS
